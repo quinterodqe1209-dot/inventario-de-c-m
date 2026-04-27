@@ -1,0 +1,29 @@
+johan estiven quintero duque:
+    modulos
+1.El sistema debe permitir al usuario iniciar sesión con usuario y contraseña.
+2.El sistema debe validar los datos ingresados y permitir o denegar el acceso
+3.El sistema debe permitir registrar nuevos productos en el inventario.
+4.El sistema le mostrará al gerente cuántos y cuáles productos se vendieron.
+
+
+
+
+
+
+jonathan oswaldo quijano cardona:
+1.El sistema debe mostrar la cantidad disponible de cada producto en stock.
+2.El sistema debe permitir registrar peticiones, quejas o reclamos de los clientes.
+3.El sistema debe permitir consultar el estado de una PQR registrada.
+4.El sistema debe permitir al usuario ver su información personal.
+
+
+
+
+
+
+
+Sneider Alvarez Santos:
+1.El usuario podrá ver una opción de sus productos comprados, productos favoritos, productos si están en pedido, fecha de la compra.
+2.El sistema debe permitir registrar compras de productos para actualizar el inventario.
+3.El sistema mostrará los productos seleccionados por el usuario y la sumatoria del total que deberá pagar.
+4.unir todo
