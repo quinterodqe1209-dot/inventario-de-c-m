@@ -1,18 +1,36 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import StockPage from "./pages/StockPage";
-import RegisterPQR from "./pages/RegisterPQR";
-import ConsultPQR from "./pages/ConsultPQR";
-import Profile from "./pages/Profile";
+
+import Inventario from "./pages/Inventario";
+import RegistrarPQR from "./pages/RegistrarPQR";
+import ConsultarPQR from "./pages/ConsultarPQR";
+import PerfilUsuario from "./pages/PerfilUsuario";
 
 function App() {
+
   return (
     <BrowserRouter>
+
       <Routes>
-        <Route path="/" element={<StockPage />} />
-        <Route path="/registrar-pqr" element={<RegisterPQR />} />
-        <Route path="/consultar-pqr" element={<ConsultPQR />} />
-        <Route path="/perfil" element={<Profile />} />
+
+        <Route path="/" element={<Inventario />} />
+
+        <Route
+          path="/registrar-pqr"
+          element={<RegistrarPQR />}
+        />
+
+        <Route
+          path="/consultar-pqr"
+          element={<ConsultarPQR />}
+        />
+
+        <Route
+          path="/perfil"
+          element={<PerfilUsuario />}
+        />
+
       </Routes>
+
     </BrowserRouter>
   );
 }
