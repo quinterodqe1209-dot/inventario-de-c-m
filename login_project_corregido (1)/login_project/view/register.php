@@ -136,20 +136,47 @@
                     <label for="correo" class="font-industrial text-xs font-semibold tracking-wider uppercase text-gray-300">
                         Correo Electrónico
                     </label>
-                    <div class="relative">
-                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-500">
-                            <i data-lucide="mail" class="w-4 h-4"></i>
-                        </span>
-                        <input 
-                            type="email" 
-                            id="correo" 
-                            name="correo" 
-                            placeholder="Escribe tu correo electrónico"
-                            pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
-                            title="Ingresa un correo electrónico válido."
-                            required
-                            class="w-full pl-10 pr-4 py-3 bg-[#131927] border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all"
+                    <div class="flex gap-2 items-start">
+                        <div class="relative flex-1">
+                            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-500">
+                                <i data-lucide="mail" class="w-4 h-4"></i>
+                            </span>
+                            <input 
+                                type="email" 
+                                id="correo" 
+                                name="correo" 
+                                placeholder="Escribe tu correo electrónico"
+                                pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
+                                title="Ingresa un correo electrónico válido."
+                                required
+                                class="w-full pl-10 pr-4 py-3 bg-[#131927] border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all"
+                            >
+                        </div>
+                        <button
+                            type="button"
+                            id="btnEnviarCodigo"
+                            class="shrink-0 px-3 py-2.5 bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all"
                         >
+                            Enviar código
+                        </button>
+                    </div>
+                    <div id="codigo-verificacion-wrap" class="hidden space-y-2 pt-1">
+                        <label for="codigo_verificacion" class="font-industrial text-xs font-semibold tracking-wider uppercase text-gray-300">
+                            Código de verificación
+                        </label>
+                        <div class="flex gap-2 items-center">
+                            <input
+                                type="text"
+                                id="codigo_verificacion"
+                                name="codigo_verificacion"
+                                inputmode="numeric"
+                                maxlength="6"
+                                pattern="[0-9]{6}"
+                                placeholder="123456"
+                                class="w-full px-4 py-3 bg-[#131927] border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all"
+                            >
+                            <span id="codigoStatus" class="text-[10px] uppercase tracking-wider text-gray-400">Pendiente</span>
+                        </div>
                     </div>
                 </div>
 
@@ -232,6 +259,102 @@
 
     <script>
         lucide.createIcons();
+
+        const correoInput = document.getElementById('correo');
+        const btnEnviarCodigo = document.getElementById('btnEnviarCodigo');
+        const codigoWrap = document.getElementById('codigo-verificacion-wrap');
+        const codigoInput = document.getElementById('codigo_verificacion');
+        const codigoStatus = document.getElementById('codigoStatus');
+        const form = document.querySelector('form');
+
+        let verificacionActiva = false;
+        let codigoEnviadoPara = '';
+
+        function setCodigoStatus(message, tone = 'gray') {
+            codigoStatus.textContent = message;
+            codigoStatus.className = 'text-[10px] uppercase tracking-wider';
+            if (tone === 'green') {
+                codigoStatus.classList.add('text-emerald-400');
+            } else if (tone === 'amber') {
+                codigoStatus.classList.add('text-amber-400');
+            } else if (tone === 'red') {
+                codigoStatus.classList.add('text-red-400');
+            } else {
+                codigoStatus.classList.add('text-gray-400');
+            }
+        }
+
+        correoInput.addEventListener('input', () => {
+            verificacionActiva = false;
+            codigoEnviadoPara = '';
+            codigoWrap.classList.add('hidden');
+            codigoInput.value = '';
+            setCodigoStatus('Pendiente');
+        });
+
+        btnEnviarCodigo.addEventListener('click', async () => {
+            const correo = correoInput.value.trim();
+            const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
+
+            if (!correoValido) {
+                setCodigoStatus('Correo inválido', 'red');
+                correoInput.focus();
+                return;
+            }
+
+            btnEnviarCodigo.disabled = true;
+            btnEnviarCodigo.textContent = 'Enviando...';
+            setCodigoStatus('Enviando', 'amber');
+
+            try {
+                const formData = new URLSearchParams();
+                formData.append('action', 'enviar_codigo_verificacion');
+                formData.append('correo', correo);
+                formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+
+                const response = await fetch('index.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData.toString()
+                });
+
+                const data = await response.json();
+
+                if (data && data.success) {
+                    verificacionActiva = true;
+                    codigoEnviadoPara = correo;
+                    codigoWrap.classList.remove('hidden');
+                    codigoInput.focus();
+                    if (data.debug_code) {
+                        setCodigoStatus('Código de prueba: ' + data.debug_code, 'amber');
+                    } else {
+                        setCodigoStatus('Código enviado', 'green');
+                    }
+                } else {
+                    setCodigoStatus(data && data.message ? data.message : 'Error', 'red');
+                }
+            } catch (error) {
+                setCodigoStatus('Error al enviar', 'red');
+            } finally {
+                btnEnviarCodigo.disabled = false;
+                btnEnviarCodigo.textContent = 'Enviar código';
+            }
+        });
+
+        form.addEventListener('submit', (event) => {
+            const correo = correoInput.value.trim();
+            const codigo = codigoInput.value.trim();
+
+            if (!verificacionActiva || codigoEnviadoPara !== correo || codigo.length !== 6) {
+                event.preventDefault();
+                setCodigoStatus('Primero envía y valida el código', 'red');
+                codigoWrap.classList.remove('hidden');
+                codigoInput.focus();
+            }
+        });
     </script>
 </body>
 </html>

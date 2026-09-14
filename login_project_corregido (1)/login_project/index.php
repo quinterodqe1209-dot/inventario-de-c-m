@@ -39,6 +39,39 @@ if (isset($_GET["mensaje"]) && $_GET["mensaje"] === "registrado") {
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
     csrf_verify();
 
+    if ($_POST["action"] === "enviar_codigo_verificacion") {
+        header('Content-Type: application/json; charset=utf-8');
+        $correo = trim($_POST["correo"] ?? '');
+
+        if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['success' => false, 'message' => 'Ingresa un correo electrónico válido.']);
+            exit();
+        }
+
+        $codigo = (string) random_int(100000, 999999);
+        $_SESSION['email_verification'] = [
+            'email' => $correo,
+            'code' => $codigo,
+            'expires_at' => time() + 300,
+        ];
+
+        $asunto = 'Código de verificación - C&M Soluciones Abrasivas';
+        $mensaje = "Tu código de verificación es: {$codigo}\n\nEste código expirará en 5 minutos.\n\nC&M Soluciones Abrasivas SAS";
+        $headers = "From: noresponder@cmyabrasivas.com\r\nContent-Type: text/plain; charset=UTF-8";
+        $enviado = @mail($correo, $asunto, $mensaje, $headers);
+
+        if ($enviado) {
+            echo json_encode(['success' => true, 'message' => 'Se envió el código de verificación a tu correo.']);
+        } else {
+            echo json_encode([
+                'success' => true,
+                'message' => 'No se pudo enviar automáticamente desde este servidor local. Usa este código de prueba: ' . $codigo,
+                'debug_code' => $codigo,
+            ]);
+        }
+        exit();
+    }
+
     // ACCIÓN DE REGISTRO
     if ($_POST["action"] === "register") {
         $nombre = trim($_POST["nombre"] ?? '');
@@ -46,6 +79,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         $documento_id = trim($_POST["documento_id"] ?? '');
         $fecha_nacimiento = trim($_POST["fecha_nacimiento"] ?? '');
         $correo = trim($_POST["correo"] ?? '');
+        $codigo_verificacion = trim($_POST["codigo_verificacion"] ?? '');
         $username = trim($_POST["username"] ?? '');
         $password = trim($_POST["password"] ?? '');
         $rol = trim($_POST["rol"] ?? 'cliente');
@@ -64,6 +98,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
 
         $documento_id_valido = preg_match('/^\d+$/', $documento_id) === 1;
         $correo_valido = filter_var($correo, FILTER_VALIDATE_EMAIL) !== false;
+        $verificacion = $_SESSION['email_verification'] ?? null;
+        $codigo_valido = $verificacion !== null
+            && isset($verificacion['email'], $verificacion['code'], $verificacion['expires_at'])
+            && $verificacion['email'] === $correo
+            && (int) $verificacion['expires_at'] >= time()
+            && hash_equals((string) $verificacion['code'], (string) $codigo_verificacion);
 
         if (!empty($nombre) && !empty($apellido) && !empty($documento_id) && !empty($fecha_nacimiento) && !empty($correo) && !empty($username) && !empty($password)) {
             if (!$documento_id_valido) {
@@ -77,6 +117,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                 require_once "view/register.php";
                 exit();
             }
+
+            if (!$codigo_valido) {
+                $error = "Debes enviar y verificar el código enviado a tu correo antes de registrarte.";
+                require_once "view/register.php";
+                exit();
+            }
+
+            unset($_SESSION['email_verification']);
 
             if ($controller->registrar($nombre, $apellido, $documento_id, $fecha_nacimiento, $correo, $username, $password, $rol)) {
                 header("Location: index.php?action=login&mensaje=registrado");
