@@ -1,6 +1,12 @@
 <?php
 // Archivo: index.php
-require_once "controller/UsuarioController.php";
+require_once __DIR__ . "/controllers/UsuarioController.php";
+require_once __DIR__ . "/controllers/AuthController.php";
+require_once __DIR__ . "/controllers/PagoController.php";
+require_once __DIR__ . "/controllers/ProveedorController.php";
+require_once __DIR__ . "/controllers/PqrsController.php";
+require_once __DIR__ . "/controllers/DashboardController.php";
+require_once __DIR__ . "/controllers/InventarioController.php";
 require_once "config/csrf.php";
 require_once "config/session_guard.php";
 
@@ -22,6 +28,12 @@ $accionActual = $_GET["action"] ?? null;
 session_guard_check($accionActual !== "dashboard_data");
 
 $controller = new UsuarioController();
+$authController = new AuthController();
+$pagoController = new PagoController();
+$proveedorController = new ProveedorController();
+$pqrsController = new PqrsController();
+$dashboardController = new DashboardController();
+$inventarioController = new InventarioController();
 
 $error = "";
 $mensaje = "";
@@ -92,7 +104,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
 
         if (!in_array($rol, $roles_validos, true)) {
             $error = "El rol seleccionado no es válido.";
-            require_once "view/register.php";
+            require_once "views/register.php";
             exit();
         }
 
@@ -108,19 +120,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         if (!empty($nombre) && !empty($apellido) && !empty($documento_id) && !empty($fecha_nacimiento) && !empty($correo) && !empty($username) && !empty($password)) {
             if (!$documento_id_valido) {
                 $error = "El documento de identidad solo debe contener números.";
-                require_once "view/register.php";
+                require_once "views/register.php";
                 exit();
             }
 
             if (!$correo_valido) {
                 $error = "El correo electrónico no es válido.";
-                require_once "view/register.php";
+                require_once "views/register.php";
                 exit();
             }
 
             if (!$codigo_valido) {
                 $error = "Debes enviar y verificar el código enviado a tu correo antes de registrarte.";
-                require_once "view/register.php";
+                require_once "views/register.php";
                 exit();
             }
 
@@ -131,12 +143,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                 exit();
             } else {
                 $error = "No se pudo registrar. El usuario '" . htmlspecialchars($username) . "' ya existe o hubo un error en la base de datos.";
-                require_once "view/register.php";
+                require_once "views/register.php";
                 exit();
             }
         } else {
             $error = "Por favor completa todos los campos.";
-            require_once "view/register.php";
+                require_once "views/register.php";
             exit();
         }
     }
@@ -199,7 +211,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                 $mensajeRecuperar = 'Si el correo ingresado está registrado, recibirás el enlace de recuperación.';
             }
         }
-        require_once "view/recuperar.php";
+            require_once "views/recuperar.php";
         exit();
     }
 
@@ -222,7 +234,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
             $errorRestablecer = $token === ''
                 ? 'Enlace de recuperación inválido.'
                 : (mb_strlen($password) < 6 ? 'La contraseña debe tener al menos 6 caracteres.' : 'Las contraseñas no coinciden.');
-            require_once "view/restablecer.php";
+            require_once "views/restablecer.php";
             exit();
         }
 
@@ -233,7 +245,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         if (!$fila) {
             $errorRestablecer = 'El enlace de recuperación no es válido, ya fue usado o expiró. Solicita uno nuevo.';
             $tokenRestablecer = '';
-            require_once "view/restablecer.php";
+            require_once "views/restablecer.php";
             exit();
         }
 
@@ -252,55 +264,37 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         $password = trim($_POST["password"] ?? '');
         $rol_seleccionado = trim($_POST["rol"] ?? '');
 
-        // Obtener usuario desde el controlador (debe incluir el campo 'rol' de la BD)
-        $user = $controller->login($username, $password);
-
-        if ($user) {
-            $rol_bd = strtolower(trim($user['rol'] ?? 'cliente'));
-            $rol_sel = strtolower(trim($rol_seleccionado));
-
-            // VERIFICACIÓN DE ROL: Si el rol seleccionado NO coincide con el de la Base de Datos
-            if ($rol_sel !== $rol_bd) {
-                $error = "Acceso denegado: Tu cuenta no tiene permisos para el rol de '" . htmlspecialchars($rol_seleccionado) . "'.";
-                require_once "view/login.php";
-                exit();
-            }
-
-            // Si coincide, guardamos en sesión y renovamos el identificador.
-            session_regenerate_id(true);
-            $_SESSION["user"] = $user;
-            $_SESSION["rol"] = $rol_bd;
-
-            // Redirección dinámica según el rol validado
-            switch ($rol_bd) {
-                case 'admin':
-                case 'gerente':
-                    header("Location: index.php?action=gerente");
-                    break;
-                case 'proveedor':
-                    header("Location: index.php?action=proveedor");
-                    break;
-                case 'inventario':
-                    header("Location: index.php?action=inventario");
-                    break;
-                case 'cliente':
-                    header("Location: index.php?action=cliente");
-                    break;
-                default:
-                    header("Location: index.php?action=usuario&section=home");
-                    break;
-            }
-            exit();
-        } else {
-            $error = "Usuario o contraseña incorrectos.";
-            require_once "view/login.php";
+        $resultadoLogin = $authController->login($username, $password, $rol_seleccionado);
+        if (!$resultadoLogin['success']) {
+            $error = $resultadoLogin['error'];
+            require_once "views/login.php";
             exit();
         }
+
+        switch ($resultadoLogin['role']) {
+            case 'admin':
+            case 'gerente':
+                header("Location: index.php?action=gerente");
+                break;
+            case 'proveedor':
+                header("Location: index.php?action=proveedor");
+                break;
+            case 'inventario':
+                header("Location: index.php?action=inventario");
+                break;
+            case 'cliente':
+                header("Location: index.php?action=cliente");
+                break;
+            default:
+                header("Location: index.php?action=usuario&section=home");
+                break;
+        }
+        exit();
     }
 
     // ACCIÓN CLIENTE: ENVIAR COMPROBANTE DE PAGO AL GERENTE
     if ($_POST["action"] === "enviar_comprobante_pago") {
-        if (!in_array($_SESSION['rol'] ?? '', ['cliente', 'gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
+        if (!$pagoController->userCanSend()) { http_response_code(403); die('Sin permisos.'); }
         csrf_verify();
         require_once "config/conexion.php";
         $db = (new Conexion())->conn;
@@ -353,7 +347,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
 
     // ACCIÓN GERENTE: REVISAR COMPROBANTE DE PAGO
     if ($_POST["action"] === "actualizar_comprobante_pago") {
-        if (!in_array($_SESSION['rol'] ?? '', ['gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
+        if (!$pagoController->userCanReview()) { http_response_code(403); die('Sin permisos.'); }
         csrf_verify();
         require_once "config/conexion.php";
         $db = (new Conexion())->conn;
@@ -368,7 +362,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
 
     // ACCIÓN PROVEEDOR: ACTUALIZAR ESTADO DE UNA ORDEN DE COMPRA
     if ($_POST["action"] === "generar_orden_reabastecimiento") {
-        if (($_SESSION['rol'] ?? '') !== 'gerente') { http_response_code(403); die('Sin permisos.'); }
+        if (!$proveedorController->canGenerateOrders()) { http_response_code(403); die('Sin permisos.'); }
         csrf_verify();
         require_once "config/conexion.php";
         $db = (new Conexion())->conn;
@@ -402,7 +396,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
 
     if ($_POST["action"] === "actualizar_orden") {
         $rol = $_SESSION['rol'] ?? '';
-        if (!in_array($rol, ['proveedor', 'gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
+        if (!$proveedorController->canManageOrders()) { http_response_code(403); die('Sin permisos.'); }
         require_once "config/conexion.php";
         $db = (new Conexion())->conn;
         $db->exec("CREATE TABLE IF NOT EXISTS orden_compra (ORD_id_orden INT NOT NULL, PVR_contacto VARCHAR(12) NOT NULL, ORD_fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, ORD_estado VARCHAR(20) NOT NULL DEFAULT 'pendiente', ORD_total DECIMAL(10,2) DEFAULT NULL, ORD_retrasada TINYINT(1) NOT NULL DEFAULT 0, ORD_notas TEXT NULL) ENGINE=InnoDB");
@@ -429,7 +423,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
     // ACCIÓN PROVEEDOR: AGENDAR ENTREGA
     if ($_POST["action"] === "agendar_entrega") {
         $rol = $_SESSION['rol'] ?? '';
-        if (!in_array($rol, ['proveedor', 'gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
+        if (!$proveedorController->canManageOrders()) { http_response_code(403); die('Sin permisos.'); }
         require_once "config/conexion.php";
         $db = (new Conexion())->conn;
         $db->exec("CREATE TABLE IF NOT EXISTS despacho_bodega (DES_id INT NOT NULL, DES_direccion_envio VARCHAR(150) NOT NULL, DES_orden_bodega VARCHAR(50) NOT NULL, DES_id_confirmacion VARCHAR(50) NOT NULL, AUX_id INT DEFAULT NULL, estado VARCHAR(20) DEFAULT 'Pendiente', PED_id_pedido INT NOT NULL) ENGINE=InnoDB");
@@ -457,7 +451,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
     // ACCIÓN PROVEEDOR: SUBIR FACTURA PDF/XML
     if ($_POST["action"] === "subir_factura") {
         $rol = $_SESSION['rol'] ?? '';
-        if (!in_array($rol, ['proveedor', 'gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
+        if (!$proveedorController->canManageOrders()) { http_response_code(403); die('Sin permisos.'); }
         require_once "config/conexion.php";
         $db = (new Conexion())->conn;
         $db->exec("CREATE TABLE IF NOT EXISTS factura_orden_compra (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, ORD_id_orden INT NOT NULL, archivo VARCHAR(255) NOT NULL, fecha_subida DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_foc_orden (ORD_id_orden)) ENGINE=InnoDB");
@@ -488,17 +482,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
     // ACCIÓN ADMIN/GERENTE: CAMBIAR ESTADO DE UNA PQRS
     if ($_POST["action"] === "actualizar_estado_pqrs") {
         $rol = $_SESSION['rol'] ?? '';
-        if (!in_array($rol, ['gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
-        require_once "config/conexion.php";
-        $db = (new Conexion())->conn;
+        if (!$pqrsController->canManage()) { http_response_code(403); die('Sin permisos.'); }
         $idPqrs = (int) ($_POST['id_pqrs'] ?? 0);
         $estadoPqrs = trim($_POST['estado'] ?? '');
-        $estadosPqrs = ['Pendiente', 'En revisión', 'Resuelta', 'Cancelada'];
         $msgPqrs = 'Estado inválido.';
-        if ($idPqrs > 0 && in_array($estadoPqrs, $estadosPqrs, true)) {
-            $stmt = $db->prepare('UPDATE pqrs SET estado = :estado WHERE id_pqrs = :id');
-            $stmt->execute([':estado' => $estadoPqrs, ':id' => $idPqrs]);
-            $msgPqrs = $stmt->rowCount() > 0 ? 'PQRS #' . $idPqrs . ' actualizada a "' . $estadoPqrs . '".' : 'La PQRS no existe o no cambió de estado.';
+        if ($idPqrs > 0 && $pqrsController->isValidStatus($estadoPqrs)) {
+            $updatedRows = $pqrsController->updateStatus($idPqrs, $estadoPqrs);
+            $msgPqrs = $updatedRows > 0 ? 'PQRS #' . $idPqrs . ' actualizada a "' . $estadoPqrs . '".' : 'La PQRS no existe o no cambió de estado.';
         }
         header("Location: index.php?action=pqrs&msg=" . urlencode($msgPqrs));
         exit();
@@ -507,46 +497,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
 
 // 3. Cierre de sesión
 if (isset($_GET["action"]) && $_GET["action"] === "logout") {
-    $_SESSION = [];
-    if (ini_get('session.use_cookies')) {
-        $params = session_get_cookie_params();
-        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
-    }
-    session_destroy();
-    header("Location: index.php?action=login");
-    exit();
+    $authController->logout();
 }
 
 $roles_dashboard = ['gerente', 'inventario'];
-if (isset($_GET["action"]) && $_GET["action"] === "dashboard_data" && isset($_SESSION["user"]) && in_array($_SESSION['rol'] ?? '', $roles_dashboard, true)) {
-    require_once "config/conexion.php";
+if (isset($_GET["action"]) && $_GET["action"] === "dashboard_data" && $dashboardController->canRead()) {
     header('Content-Type: application/json; charset=utf-8');
     try {
-        $db = (new Conexion())->conn;
-        $productStats = $db->query('SELECT COUNT(*) AS products, COALESCE(SUM(PRO_stock_actual), 0) AS units, COALESCE(SUM(PRO_stock_actual <= PRO_stock_minimo), 0) AS low FROM productos WHERE deleted_at IS NULL')->fetch(PDO::FETCH_ASSOC);
-        $data = [
-            'todaySales' => 0,
-            'weekSales' => 0,
-            'monthSales' => 0,
-            'pending' => 0,
-            'products' => (int) ($productStats['products'] ?? 0),
-            'stockUnits' => (int) ($productStats['units'] ?? 0),
-            'low' => (int) ($productStats['low'] ?? 0),
-            'weekly' => array_fill(0, 7, 0),
-            'monthly' => array_fill(0, 6, 0),
-        ];
-        $hasSales = (bool) $db->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'ventas'")->fetchColumn();
-        if ($hasSales) {
-            $salesSummary = $db->query("SELECT COALESCE(SUM(CASE WHEN DATE(fecha_venta)=CURRENT_DATE() AND estado <> 'Cancelada' THEN total ELSE 0 END),0) AS today_sales, COALESCE(SUM(CASE WHEN YEARWEEK(fecha_venta, 1)=YEARWEEK(CURRENT_DATE(), 1) AND estado <> 'Cancelada' THEN total ELSE 0 END),0) AS week_sales, COALESCE(SUM(CASE WHEN MONTH(fecha_venta)=MONTH(CURRENT_DATE()) AND YEAR(fecha_venta)=YEAR(CURRENT_DATE()) AND estado <> 'Cancelada' THEN total ELSE 0 END),0) AS month_sales FROM ventas WHERE deleted_at IS NULL")->fetch(PDO::FETCH_ASSOC);
-            $data['todaySales'] = (float) ($salesSummary['today_sales'] ?? 0);
-            $data['weekSales'] = (float) ($salesSummary['week_sales'] ?? 0);
-            $data['monthSales'] = (float) ($salesSummary['month_sales'] ?? 0);
-            $data['pending'] = (int) $db->query("SELECT COALESCE(SUM(estado='Pendiente'),0) FROM ventas WHERE deleted_at IS NULL")->fetchColumn();
-            $stmt = $db->query("SELECT WEEKDAY(fecha_venta) AS day_index, SUM(total) AS amount FROM ventas WHERE fecha_venta >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY) AND estado <> 'Cancelada' AND deleted_at IS NULL GROUP BY WEEKDAY(fecha_venta)");
-            foreach ($stmt as $row) { $index = (int) $row['day_index']; if ($index >= 0 && $index < 7) $data['weekly'][$index] = (float) $row['amount']; }
-            $stmt = $db->query("SELECT PERIOD_DIFF(EXTRACT(YEAR_MONTH FROM CURRENT_DATE()), EXTRACT(YEAR_MONTH FROM fecha_venta)) AS month_index, SUM(total) AS amount FROM ventas WHERE fecha_venta >= DATE_SUB(CURRENT_DATE(), INTERVAL 5 MONTH) AND estado <> 'Cancelada' AND deleted_at IS NULL GROUP BY month_index");
-            foreach ($stmt as $row) { $index = (int) $row['month_index']; if ($index >= 0 && $index < 6) $data['monthly'][5 - $index] = (float) $row['amount']; }
-        }
+        $data = $dashboardController->indicators();
         echo json_encode($data, JSON_UNESCAPED_UNICODE);
     } catch (Throwable $exception) {
         http_response_code(500);
@@ -562,14 +520,14 @@ function vista_home_para_rol(string $rol): string
 {
     switch ($rol) {
         case 'gerente':
-            return "view/gerente_sbadm.php";
+            return "views/gerente_sbadm.php";
         case 'inventario':
-            return "view/inventario.php";
+            return "views/inventario.php";
         case 'proveedor':
-            return "view/proveedores_dashboard.php";
+            return "views/proveedores_dashboard.php";
         case 'cliente':
         default:
-            return "view/clientes_dashboard.php";
+            return "views/clientes_dashboard.php";
     }
 }
 
@@ -581,41 +539,41 @@ if (isset($_SESSION["user"])) {
     $rol = $_SESSION["rol"] ?? 'cliente';
 
     if ($action === "pago_seguro" && in_array($rol, ['cliente', 'gerente'], true)) {
-        require_once "view/pago_seguro.php";
+        require_once "views/pago_seguro.php";
     } elseif ($action === "cliente" && ($rol === "cliente" || $rol === "gerente")) {
-        require_once "view/clientes_dashboard.php";
+        require_once "views/clientes_dashboard.php";
     } elseif ($action === "gerente" && $rol === "gerente") {
-        require_once "view/gerente_sbadm.php";
+        require_once "views/gerente_sbadm.php";
     } elseif ($action === "proveedor" && ($rol === "proveedor" || $rol === "gerente")) {
-        require_once "view/proveedores_dashboard.php";
+        require_once "views/proveedores_dashboard.php";
     } elseif ($action === "pqrs" && $rol === "gerente") {
-        require_once "view/pqrs_admin.php";
+        require_once "views/pqrs_admin.php";
     } elseif ($action === "inventario" && in_array($rol, ["inventario", "gerente"], true)) {
-        require_once "view/inventario.php";
+        require_once "views/inventario.php";
     } elseif ($action === "reportes" && $rol === "gerente") {
-        require_once "view/reportes.php";
+        require_once "views/reportes.php";
     } elseif ($action === "usuario") {
         if ($section === "perfil") {
-            require_once "view/perfil.php";
+            require_once "views/perfil.php";
         } elseif ($section === "usuarios" && $rol === "gerente") {
-            $vista_contenido = "view/usuarios.php";
-            require_once "view/layout_panel.php";
+            $vista_contenido = "views/usuarios.php";
+            require_once "views/layout_panel.php";
         } elseif ($section === "nuevo_usuario" && $rol === "gerente") {
-            $vista_contenido = "view/nuevo_usuario.php";
-            require_once "view/layout_panel.php";
+            $vista_contenido = "views/nuevo_usuario.php";
+            require_once "views/layout_panel.php";
         } elseif ($section === "editar_usuario" && $rol === "gerente") {
-            $vista_contenido = "view/editar_usuario.php";
-            require_once "view/layout_panel.php";
+            $vista_contenido = "views/editar_usuario.php";
+            require_once "views/layout_panel.php";
         } elseif ($rol === "cliente") {
-            require_once "view/clientes_dashboard.php";
+            require_once "views/clientes_dashboard.php";
         } elseif ($rol === "proveedor") {
-            require_once "view/proveedores_dashboard.php";
+            require_once "views/proveedores_dashboard.php";
         } elseif ($rol === "gerente") {
-            require_once "view/gerente_sbadm.php";
+            require_once "views/gerente_sbadm.php";
         } elseif ($rol === "inventario") {
-            require_once "view/inventario.php";
+            require_once "views/inventario.php";
         } else {
-            require_once "view/clientes_dashboard.php";
+            require_once "views/clientes_dashboard.php";
         }
     } else {
         // Antes: esto cargaba "view/gerente_sbadm.php" para CUALQUIER action
@@ -630,12 +588,12 @@ if (isset($_SESSION["user"])) {
     $action = $_GET["action"] ?? 'login';
 
     if ($action === "register") {
-        require_once "view/register.php";
+        require_once "views/register.php";
     } elseif ($action === "recuperar") {
-        require_once "view/recuperar.php";
+        require_once "views/recuperar.php";
     } elseif ($action === "restablecer") {
-        require_once "view/restablecer.php";
+        require_once "views/restablecer.php";
     } else {
-        require_once "view/login.php";
+            require_once "views/login.php";
     }
 }

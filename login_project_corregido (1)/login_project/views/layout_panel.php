@@ -17,12 +17,12 @@ $contenidoPanel = ob_get_clean();
 $usuarioPanel = $_SESSION['user']['username'] ?? 'Usuario';
 $rolPanel     = $_SESSION['rol'] ?? '';
 $tituloPanel  = match ($vista_contenido) {
-    'view/usuarios.php'       => 'Gestión de Usuarios | C&M',
-    'view/nuevo_usuario.php'  => 'Nuevo Usuario | C&M',
-    'view/editar_usuario.php' => 'Editar Usuario | C&M',
+    'views/usuarios.php'       => 'Gestión de Usuarios | C&M',
+    'views/nuevo_usuario.php'  => 'Nuevo Usuario | C&M',
+    'views/editar_usuario.php' => 'Editar Usuario | C&M',
     default                   => 'C&M Soluciones Abrasivas',
 };
-$activeUsuarios = in_array($vista_contenido, ['view/usuarios.php', 'view/nuevo_usuario.php', 'view/editar_usuario.php'], true);
+$activeUsuarios = in_array($vista_contenido, ['views/usuarios.php', 'views/nuevo_usuario.php', 'views/editar_usuario.php'], true);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -39,7 +39,13 @@ $activeUsuarios = in_array($vista_contenido, ['view/usuarios.php', 'view/nuevo_u
     <nav class="sb-topnav navbar navbar-expand navbar-dark bg-dark">
         <a class="navbar-brand ps-3" href="index.php?action=gerente">C&M ABRASIVAS</a>
         <button class="btn btn-link btn-sm order-1 order-lg-0 me-4 me-lg-0" id="sidebarToggle" type="button"><i class="fas fa-bars"></i></button>
-        <ul class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4"><li class="nav-item dropdown"><a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown"><i class="fas fa-user fa-fw"></i> <?php echo htmlspecialchars($usuarioPanel, ENT_QUOTES, 'UTF-8'); ?></a><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="index.php?action=usuario&section=perfil">Mi perfil</a></li><li><hr class="dropdown-divider"></li><li><a class="dropdown-item" href="index.php?action=logout">Cerrar sesión</a></li></ul></li></ul>
+        <form id="globalSearchForm" class="d-none d-md-inline-block form-inline ms-auto me-3 my-2 my-md-0">
+            <div class="input-group">
+                <input id="globalSearchInput" class="form-control" type="search" placeholder="Buscar en este dashboard..." aria-label="Buscar en este dashboard">
+                <button class="btn btn-primary" type="submit" aria-label="Buscar"><i class="fas fa-search"></i></button>
+            </div>
+        </form>
+        <ul class="navbar-nav ms-md-0 me-3 me-lg-4"><li class="nav-item dropdown"><a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown"><i class="fas fa-user fa-fw"></i> <?php echo htmlspecialchars($usuarioPanel, ENT_QUOTES, 'UTF-8'); ?></a><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="index.php?action=usuario&section=perfil">Mi perfil</a></li><li><hr class="dropdown-divider"></li><li><a class="dropdown-item" href="index.php?action=logout">Cerrar sesión</a></li></ul></li></ul>
     </nav>
     <div id="layoutSidenav">
         <div id="layoutSidenav_nav"><nav class="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion"><div class="sb-sidenav-menu"><div class="nav">
@@ -58,5 +64,24 @@ $activeUsuarios = in_array($vista_contenido, ['view/usuarios.php', 'view/nuevo_u
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/scripts.js"></script>
+    <script>
+        document.getElementById('globalSearchForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            const query = document.getElementById('globalSearchInput').value.trim().toLowerCase();
+            const elements = Array.from(document.querySelectorAll('#layoutSidenav_content .card, #layoutSidenav_content section, #layoutSidenav_content h1, #layoutSidenav_content h2, #layoutSidenav_content h3, #layoutSidenav_content h4, #layoutSidenav_content h5, #layoutSidenav_nav .nav-link'));
+            elements.forEach(element => element.classList.remove('border-primary'));
+
+            if (!query) return;
+
+            const match = elements.find(element => element.textContent.toLowerCase().includes(query));
+            if (!match) {
+                window.alert('No se encontró "' + document.getElementById('globalSearchInput').value.trim() + '" en este dashboard.');
+                return;
+            }
+
+            match.classList.add('border', 'border-primary');
+            match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    </script>
 </body>
 </html>

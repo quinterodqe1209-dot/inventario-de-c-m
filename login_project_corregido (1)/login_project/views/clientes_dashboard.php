@@ -168,10 +168,10 @@ $mqrsTotal = $mqrsTotal ?? 0;
             </button>
             
             <!-- Navbar Search -->
-            <form class="d-none d-md-inline-block form-inline ms-auto me-0 me-md-3 my-2 my-md-0">
+            <form id="catalogSearchForm" class="d-none d-md-inline-block form-inline ms-auto me-0 me-md-3 my-2 my-md-0">
                 <div class="input-group">
-                    <input class="form-control" type="text" placeholder="Buscar abrasivos, discos..." aria-label="Buscar..." aria-describedby="btnNavbarSearch" />
-                    <button class="btn btn-primary" id="btnNavbarSearch" type="button"><i class="fas fa-search"></i></button>
+                    <input id="catalogSearchInput" class="form-control" type="search" placeholder="Buscar abrasivos, discos..." aria-label="Buscar..." aria-describedby="btnNavbarSearch" />
+                    <button class="btn btn-primary" id="btnNavbarSearch" type="submit"><i class="fas fa-search"></i></button>
                 </div>
             </form>
             
@@ -358,7 +358,7 @@ $mqrsTotal = $mqrsTotal ?? 0;
                                         $stock = (int) $product['PRO_stock_actual'];
                                         $image = trim((string) ($product['PRO_imagen_url'] ?? ''));
                                     ?>
-                                        <div class="col-md-4 mb-3">
+                                        <div class="col-md-4 mb-3 catalog-product-card" data-product-search="<?php echo htmlspecialchars(strtolower($product['PRO_codigo'] . ' ' . $product['PRO_nombre_producto'] . ' ' . ($product['PRO_descripcion'] ?? '') . ' ' . ($product['PRO_marca'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>">
                                             <div class="card h-100 shadow-sm border-0">
                                                 <?php if ($image): ?><img src="<?php echo htmlspecialchars($image, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo $productName; ?>" class="card-img-top" style="height:170px;object-fit:cover"><?php else: ?><div class="d-flex align-items-center justify-content-center bg-light text-warning" style="height:170px"><i class="fas fa-compact-disc fa-4x"></i></div><?php endif; ?>
                                                 <div class="card-body d-flex flex-column">
@@ -667,6 +667,39 @@ $mqrsTotal = $mqrsTotal ?? 0;
                     timerProgressBar: true
                 });
             }
+
+            function searchCatalogProduct(event) {
+                if (event) event.preventDefault();
+
+                const input = document.getElementById('catalogSearchInput');
+                const query = input.value.trim().toLowerCase();
+                const candidates = Array.from(document.querySelectorAll(
+                    '#layoutSidenav_content .card, #layoutSidenav_content section, #layoutSidenav_content h1, #layoutSidenav_content h2, #layoutSidenav_content h3, #layoutSidenav_content h4, #layoutSidenav_content h5, #layoutSidenav_nav .nav-link'
+                ));
+
+                if (!query) {
+                    candidates.forEach(element => element.classList.remove('border', 'border-primary', 'search-result-focus'));
+                    return;
+                }
+
+                const matches = candidates.filter(element => element.textContent.toLowerCase().includes(query));
+
+                if (!matches.length) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'No se encontró',
+                        text: 'No encontramos información que coincida con "' + input.value.trim() + '" en este dashboard.',
+                        confirmButtonColor: '#0d6efd'
+                    });
+                    return;
+                }
+
+                candidates.forEach(element => element.classList.remove('border', 'border-primary', 'search-result-focus'));
+                matches[0].classList.add('border', 'border-primary', 'search-result-focus');
+                matches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            document.getElementById('catalogSearchForm').addEventListener('submit', searchCatalogProduct);
         </script>
     </body>
 </html>
