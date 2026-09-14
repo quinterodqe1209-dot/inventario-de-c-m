@@ -105,6 +105,9 @@
                             id="documento_id" 
                             name="documento_id" 
                             placeholder="Escribe tu documento de identidad"
+                            inputmode="numeric"
+                            pattern="[0-9]+"
+                            title="El documento debe contener solo números."
                             required
                             class="w-full pl-10 pr-4 py-3 bg-[#131927] border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all"
                         >
@@ -142,6 +145,8 @@
                             id="correo" 
                             name="correo" 
                             placeholder="Escribe tu correo electrónico"
+                            pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
+                            title="Ingresa un correo electrónico válido."
                             required
                             class="w-full pl-10 pr-4 py-3 bg-[#131927] border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition-all"
                         >

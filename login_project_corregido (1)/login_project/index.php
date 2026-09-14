@@ -62,7 +62,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
             exit();
         }
 
+        $documento_id_valido = preg_match('/^\d+$/', $documento_id) === 1;
+        $correo_valido = filter_var($correo, FILTER_VALIDATE_EMAIL) !== false;
+
         if (!empty($nombre) && !empty($apellido) && !empty($documento_id) && !empty($fecha_nacimiento) && !empty($correo) && !empty($username) && !empty($password)) {
+            if (!$documento_id_valido) {
+                $error = "El documento de identidad solo debe contener números.";
+                require_once "view/register.php";
+                exit();
+            }
+
+            if (!$correo_valido) {
+                $error = "El correo electrónico no es válido.";
+                require_once "view/register.php";
+                exit();
+            }
+
             if ($controller->registrar($nombre, $apellido, $documento_id, $fecha_nacimiento, $correo, $username, $password, $rol)) {
                 header("Location: index.php?action=login&mensaje=registrado");
                 exit();

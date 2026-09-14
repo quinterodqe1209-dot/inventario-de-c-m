@@ -14,7 +14,7 @@ const SESSION_TIMEOUT_SECONDS = 15 * 60; // 15 minutos
  *                           inactividad aunque el usuario no esté presente).
  */
 function session_guard_check(bool $renovarMarca = true): void
-{
+{                                                                                                                                                                                                                                       
     if (!isset($_SESSION['user'])) {
         // No hay sesión activa que expirar.
         $_SESSION['last_activity'] = time();

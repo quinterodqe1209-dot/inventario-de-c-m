@@ -43,7 +43,19 @@ if($_SERVER['REQUEST_METHOD']==='POST' && $canEdit){
   }elseif($action==='delete'){$check=$db->prepare('SELECT PRO_codigo FROM productos WHERE PRO_codigo=? AND deleted_at IS NULL');$check->execute([$code]);if(!$check->fetchColumn())throw new RuntimeException('Producto no encontrado.');$stmt=$db->prepare('UPDATE productos SET deleted_at=NOW() WHERE PRO_codigo=?');$stmt->execute([$code]);$notice='Producto eliminado correctamente.';}
  }catch(Throwable $e){$error=$e->getMessage();}
 }
-$search=trim($_GET['q']??'');$searchWhere=$search!==''?" AND (PRO_nombre_producto LIKE ? OR PRO_marca LIKE ? OR PRO_descripcion LIKE ?)":'';$searchParams=$search!==''?["%$search%","%$search%","%$search%"]:[];$productsSql='SELECT PRO_codigo,PRO_nombre_producto,PRO_descripcion,PRO_marca,PRO_imagen_url,PRO_precio_unitario,PRO_stock_actual,PRO_stock_minimo FROM productos WHERE deleted_at IS NULL'.$searchWhere.' ORDER BY PRO_codigo DESC';$productsStmt=$db->prepare($productsSql);$productsStmt->execute($searchParams);$products=$productsStmt->fetchAll(PDO::FETCH_ASSOC);
+$search = trim((string) ($_GET['q'] ?? ''));
+$search = preg_replace('/\s+/', ' ', $search);
+$searchWhere = '';
+$searchParams = [];
+if ($search !== '') {
+    $searchPattern = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search) . '%';
+    $searchWhere = ' AND (LOWER(COALESCE(PRO_nombre_producto, "")) LIKE LOWER(?) OR LOWER(COALESCE(PRO_marca, "")) LIKE LOWER(?) OR LOWER(COALESCE(PRO_descripcion, "")) LIKE LOWER(?) OR LOWER(COALESCE(PRO_proveedor, "")) LIKE LOWER(?))';
+    $searchParams = [$searchPattern, $searchPattern, $searchPattern, $searchPattern];
+}
+$productsSql = 'SELECT PRO_codigo,PRO_nombre_producto,PRO_descripcion,PRO_marca,PRO_imagen_url,PRO_precio_unitario,PRO_stock_actual,PRO_stock_minimo FROM productos WHERE deleted_at IS NULL' . $searchWhere . ' ORDER BY PRO_codigo DESC';
+$productsStmt = $db->prepare($productsSql);
+$productsStmt->execute($searchParams);
+$products = $productsStmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <?php if (($_SESSION['rol'] ?? '') === 'inventario'): ?>
 <style>
