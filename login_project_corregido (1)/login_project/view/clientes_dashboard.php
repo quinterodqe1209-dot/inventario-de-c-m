@@ -10,6 +10,10 @@ $pqrsError = '';
 $stockByName = [];
 $favoriteProductIds = [];
 $favoriteMessage = '';
+$paymentMessage = trim($_GET['mensaje_pago'] ?? '');
+$paymentAmount = max(0, (float) ($_GET['total_pago'] ?? 0));
+$paymentInvoice = trim($_GET['factura_pago'] ?? '');
+$paymentProofs = [];
 try {
     $db = (new Conexion())->conn;
     $catalogProducts = $db->query("SELECT PRO_codigo, PRO_nombre_producto, PRO_descripcion, PRO_marca, PRO_imagen_url, PRO_precio_unitario, PRO_stock_actual FROM productos WHERE deleted_at IS NULL ORDER BY PRO_codigo DESC")->fetchAll(PDO::FETCH_ASSOC);
@@ -35,6 +39,24 @@ try {
     $stmt = $db->prepare('SELECT producto FROM auditoria_favoritos WHERE usuario = :usuario');
     $stmt->execute([':usuario' => $favoriteUser]);
     $favoriteProductIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    $db->exec("CREATE TABLE IF NOT EXISTS comprobantes_pago (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        id_usuario INT NOT NULL,
+        medio_pago ENUM('Nequi','Bancolombia','Davivienda','Banco de la Vivienda') NOT NULL,
+        monto DECIMAL(12,2) NOT NULL,
+        referencia VARCHAR(100) NOT NULL,
+        comprobante VARCHAR(255) NOT NULL,
+        estado ENUM('Pendiente','Aprobado','Rechazado') NOT NULL DEFAULT 'Pendiente',
+        fecha_envio DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_comprobantes_estado (estado),
+        INDEX idx_comprobantes_usuario (id_usuario)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("ALTER TABLE comprobantes_pago ADD COLUMN IF NOT EXISTS direccion_envio VARCHAR(200) NOT NULL DEFAULT '' AFTER referencia");
+    $db->exec("ALTER TABLE comprobantes_pago ADD COLUMN IF NOT EXISTS numero_factura VARCHAR(50) NOT NULL DEFAULT '' AFTER direccion_envio");
+    $stmt = $db->prepare('SELECT id, medio_pago, monto, referencia, direccion_envio, numero_factura, estado, fecha_envio FROM comprobantes_pago WHERE id_usuario = ? ORDER BY fecha_envio DESC LIMIT 10');
+    $stmt->execute([(int) ($_SESSION['user']['id'] ?? 0)]);
+    $paymentProofs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $db->exec("CREATE TABLE IF NOT EXISTS pqrs (
         id_pqrs INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -314,7 +336,7 @@ $mqrsTotal = $mqrsTotal ?? 0;
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mt-3 border-top pt-3">
                                     <h4>Total Carrito: <span id="cartTotal" class="text-primary">$ 0</span></h4>
-                                    <button class="btn btn-success btn-lg"><i class="fas fa-lock me-2"></i> Proceder al Pago</button>
+                                    <button type="button" class="btn btn-success btn-lg" onclick="proceedToPayment()"><i class="fas fa-lock me-2"></i> Proceder al Pago</button>
                                 </div>
                             </div>
                         </div>
@@ -413,30 +435,24 @@ $mqrsTotal = $mqrsTotal ?? 0;
                                 <div class="card mb-4" id="pagos">
                                     <div class="card-header bg-dark text-white">
                                         <i class="fas fa-credit-card me-1"></i>
-                                        <strong>MEDIOS DE PAGO REGISTRADOS</strong>
+                                        <strong>MEDIOS DE PAGO Y COMPROBANTES</strong>
                                     </div>
-                                    <div class="col-md-4 mb-3">
-                                            <label for="tipo_pago" class="form-label">Tipo de pago</label>
-                                            <select id="tipo_pago" name="tipo" class="form-select" required>
-                                                <option value="">Selecciona una opción</option>
-                                                <option>nequi</option>
-                                                <option>Tarjeta de Débito</option>
-                                                <option>banclombia</option>
-                                            </select>
-                                        </div>
                                     <div class="card-body">
-                                        <ul class="list-group mb-3">
-                                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                <span class="badge bg-primary rounded-pill">Principal</span>
-                                            </li>
-                                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <i class="fas fa-university text-secondary fa-lg me-2"></i> nequi/ terjeta de debito/ Cuenta Bancolombia
-                                                </div>
-                                                <button class="btn btn-sm btn-outline-secondary">Editar</button>
-                                            </li>
-                                        </ul>
-                                        <button class="btn btn-outline-dark btn-sm w-100"><i class="fas fa-plus"></i>Proceder con el pago</button>
+                                        <?php if ($paymentMessage !== ''): ?><div class="alert alert-info py-2"><?php echo htmlspecialchars($paymentMessage, ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
+                                        <p class="text-muted small">Envía el comprobante para que el gerente valide tu pago.</p>
+                                        <form method="POST" action="index.php?action=cliente#pagos" enctype="multipart/form-data" class="row g-2">
+                                            <?php echo csrf_field(); ?>
+                                            <input type="hidden" name="action" value="enviar_comprobante_pago">
+                                            <input type="hidden" name="numero_factura" value="<?php echo htmlspecialchars($paymentInvoice, ENT_QUOTES, 'UTF-8'); ?>">
+                                            <div class="col-md-6"><label for="medio_pago" class="form-label">Medio de pago</label><select id="medio_pago" name="medio_pago" class="form-select" required><option value="">Selecciona una opción</option><option value="Nequi">Nequi</option><option value="Bancolombia">Bancolombia</option><option value="Davivienda">Davivienda</option></select></div>
+                                            <div class="col-md-6"><label for="numero_factura_pago" class="form-label">Número de factura</label><input id="numero_factura_pago" type="text" value="<?php echo htmlspecialchars($paymentInvoice, ENT_QUOTES, 'UTF-8'); ?>" class="form-control" readonly required></div>
+                                            <div class="col-md-6"><label for="monto_pago" class="form-label">Monto del carrito</label><input id="monto_pago" name="monto" type="number" min="1" step="0.01" value="<?php echo $paymentAmount > 0 ? htmlspecialchars((string) $paymentAmount, ENT_QUOTES, 'UTF-8') : ''; ?>" class="form-control" readonly required><small class="text-muted">Se calcula con los productos agregados al carrito.</small></div>
+                                            <div class="col-md-6"><label for="referencia_pago" class="form-label">Referencia</label><input id="referencia_pago" name="referencia" maxlength="100" class="form-control" placeholder="Número de transacción" required></div>
+                                            <div class="col-12"><label for="direccion_envio" class="form-label">Dirección de envío</label><input id="direccion_envio" name="direccion_envio" maxlength="200" class="form-control" placeholder="Dirección donde recibirás el pedido" required></div>
+                                            <div class="col-md-6"><label for="comprobante_pago" class="form-label">Comprobante (PDF, JPG o PNG)</label><input id="comprobante_pago" name="comprobante" type="file" accept="application/pdf,image/jpeg,image/png" class="form-control" required></div>
+                                            <div class="col-12"><button class="btn btn-success w-100" type="submit"><i class="fas fa-paper-plane me-1"></i>Enviar comprobante al gerente</button></div>
+                                        </form>
+                                        <?php if ($paymentProofs): ?><hr><h6>Mis comprobantes</h6><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Factura</th><th>Medio</th><th>Monto</th><th>Referencia</th><th>Dirección</th><th>Estado</th></tr></thead><tbody><?php foreach ($paymentProofs as $proof): ?><tr><td><?php echo htmlspecialchars($proof['numero_factura'], ENT_QUOTES, 'UTF-8'); ?></td><td><?php echo htmlspecialchars($proof['medio_pago'], ENT_QUOTES, 'UTF-8'); ?></td><td>$ <?php echo number_format((float) $proof['monto'], 0, ',', '.'); ?></td><td><?php echo htmlspecialchars($proof['referencia'], ENT_QUOTES, 'UTF-8'); ?></td><td><?php echo htmlspecialchars($proof['direccion_envio'], ENT_QUOTES, 'UTF-8'); ?></td><td><span class="badge <?php echo $proof['estado'] === 'Aprobado' ? 'bg-success' : ($proof['estado'] === 'Rechazado' ? 'bg-danger' : 'bg-warning text-dark'); ?>"><?php echo htmlspecialchars($proof['estado'], ENT_QUOTES, 'UTF-8'); ?></span></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?>
                                     </div>
                                 </div>
                             </div>
@@ -520,6 +536,7 @@ $mqrsTotal = $mqrsTotal ?? 0;
         <!-- Scripts JavaScript JS -->
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
         <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script src="js/scripts.js"></script>
         <script src="js/datatables-simple-demo.js"></script>
 
@@ -546,6 +563,29 @@ $mqrsTotal = $mqrsTotal ?? 0;
                 document.getElementById('cartBadge').innerText = count;
             }
 
+            function proceedToPayment() {
+                const rows = document.querySelectorAll('#cartTableBody tr');
+                if (!rows.length) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Carrito vacío',
+                        text: 'Agrega al menos un producto antes de proceder al pago.',
+                        confirmButtonColor: '#198754'
+                    });
+                    return;
+                }
+
+                let total = 0;
+                rows.forEach(row => {
+                    const price = parseFloat(row.children[1].innerText.replace('$', '').replace(/\./g, '').replace(',', '.').trim()) || 0;
+                    const quantity = parseInt(row.querySelector('.item-qty').value, 10) || 0;
+                    total += price * quantity;
+                });
+
+                const invoiceNumber = 'FAC-PAGO-' + new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14) + '-' + Math.floor(100 + Math.random() * 900);
+                window.open('index.php?action=pago_seguro&total=' + encodeURIComponent(total.toFixed(2)) + '&factura=' + encodeURIComponent(invoiceNumber), '_blank', 'noopener');
+            }
+
             function changeQty(btn, delta) {
                 let input = btn.parentElement.querySelector('.item-qty');
                 let currentVal = parseInt(input.value);
@@ -555,7 +595,13 @@ $mqrsTotal = $mqrsTotal ?? 0;
                     input.value = newVal;
                     updateCartTotal();
                 } else if (delta > 0) {
-                    alert('No hay más unidades disponibles de este producto.');
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Stock insuficiente',
+                        text: 'No hay más unidades disponibles de este producto.',
+                        confirmButtonColor: '#ffc107',
+                        confirmButtonText: 'Entendido'
+                    });
                 }
             }
 
@@ -580,7 +626,13 @@ $mqrsTotal = $mqrsTotal ?? 0;
                     let qtyInput = existingRow.querySelector('.item-qty');
                     let currentQty = parseInt(qtyInput.value);
                     if (currentQty >= stock) {
-                        alert('No hay más unidades disponibles de este producto.');
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Stock insuficiente',
+                            text: 'No hay más unidades disponibles de este producto.',
+                            confirmButtonColor: '#ffc107',
+                            confirmButtonText: 'Entendido'
+                        });
                         return;
                     }
                     qtyInput.value = currentQty + 1;
@@ -606,7 +658,14 @@ $mqrsTotal = $mqrsTotal ?? 0;
                     tbody.appendChild(newRow);
                 }
                 updateCartTotal();
-                alert('¡Producto agregado al carrito exitosamente!');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Producto agregado',
+                    text: 'El producto fue agregado al carrito exitosamente.',
+                    confirmButtonColor: '#198754',
+                    timer: 1800,
+                    timerProgressBar: true
+                });
             }
         </script>
     </body>

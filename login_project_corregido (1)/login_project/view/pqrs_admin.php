@@ -51,6 +51,13 @@ foreach ($estadosPqrs as $est) {
         .pqrs-badge-cancelada { background: #dc3545; }
         .pqrs-badge-pendiente { background: #6c757d; }
         .desc-cell { max-width: 380px; white-space: normal; }
+        #pqrsTable,
+        #pqrsTable > :not(caption) > * > *,
+        #pqrsTable tbody td,
+        #pqrsTable tbody td small { color: #ffffff !important; }
+        #pqrsTable tbody td small { color: #b8c7d1 !important; }
+        #pqrsTable select { color: #ffffff; background-color: #101923; border-color: #34495a; }
+        #pqrsTable select option { color: #ffffff; background-color: #101923; }
     </style>
 </head>
 <body class="sb-nav-fixed">

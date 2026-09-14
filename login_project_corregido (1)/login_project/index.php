@@ -235,7 +235,108 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         }
     }
 
+    // ACCIÓN CLIENTE: ENVIAR COMPROBANTE DE PAGO AL GERENTE
+    if ($_POST["action"] === "enviar_comprobante_pago") {
+        if (!in_array($_SESSION['rol'] ?? '', ['cliente', 'gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
+        csrf_verify();
+        require_once "config/conexion.php";
+        $db = (new Conexion())->conn;
+        $db->exec("CREATE TABLE IF NOT EXISTS comprobantes_pago (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            id_usuario INT NOT NULL,
+            medio_pago ENUM('Nequi','Bancolombia','Davivienda','Banco de la Vivienda') NOT NULL,
+            monto DECIMAL(12,2) NOT NULL,
+            referencia VARCHAR(100) NOT NULL,
+            comprobante VARCHAR(255) NOT NULL,
+            estado ENUM('Pendiente','Aprobado','Rechazado') NOT NULL DEFAULT 'Pendiente',
+            fecha_envio DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_comprobantes_estado (estado),
+            INDEX idx_comprobantes_usuario (id_usuario)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("ALTER TABLE comprobantes_pago ADD COLUMN IF NOT EXISTS direccion_envio VARCHAR(200) NOT NULL DEFAULT '' AFTER referencia");
+        $db->exec("ALTER TABLE comprobantes_pago ADD COLUMN IF NOT EXISTS numero_factura VARCHAR(50) NOT NULL DEFAULT '' AFTER direccion_envio");
+        $db->exec("ALTER TABLE comprobantes_pago MODIFY medio_pago ENUM('Nequi','Bancolombia','Davivienda','Banco de la Vivienda') NOT NULL");
+
+        $medio = trim($_POST['medio_pago'] ?? '');
+        $monto = filter_var($_POST['monto'] ?? null, FILTER_VALIDATE_FLOAT);
+        $referencia = trim($_POST['referencia'] ?? '');
+        $direccion = trim($_POST['direccion_envio'] ?? '');
+        $numeroFactura = trim($_POST['numero_factura'] ?? '');
+        $archivo = $_FILES['comprobante'] ?? null;
+        $mediosValidos = ['Nequi', 'Bancolombia', 'Davivienda'];
+        $mensajePago = 'No fue posible enviar el comprobante.';
+
+        if (in_array($medio, $mediosValidos, true) && $monto !== false && $monto > 0 && $referencia !== '' && $direccion !== '' && preg_match('/^FAC-PAGO-[A-Z0-9-]+$/', $numeroFactura) && $archivo && $archivo['error'] === UPLOAD_ERR_OK && $archivo['size'] <= 5242880) {
+            $tipos = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'application/pdf' => 'pdf'];
+            $mime = (new finfo(FILEINFO_MIME_TYPE))->file($archivo['tmp_name']);
+            if (isset($tipos[$mime])) {
+                $dir = __DIR__ . '/uploads/pagos';
+                if (!is_dir($dir)) { mkdir($dir, 0755, true); }
+                $nombre = 'pago_' . date('Ymd_His') . '_' . bin2hex(random_bytes(5)) . '.' . $tipos[$mime];
+                if (move_uploaded_file($archivo['tmp_name'], $dir . DIRECTORY_SEPARATOR . $nombre)) {
+                    $proofStmt = $db->prepare('INSERT INTO comprobantes_pago (id_usuario, medio_pago, monto, referencia, direccion_envio, numero_factura, comprobante) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                    $proofStmt->execute([(int) ($_SESSION['user']['id'] ?? 0), $medio, $monto, $referencia, $direccion, $numeroFactura, 'uploads/pagos/' . $nombre]);
+                    $mensajePago = 'Comprobante enviado al gerente para revisión.';
+                }
+            } else {
+                $mensajePago = 'El comprobante debe ser PDF, JPG o PNG.';
+            }
+        } else {
+            $mensajePago = 'Completa el medio, monto, referencia, dirección, productos del carrito y adjunta un comprobante de hasta 5 MB.';
+        }
+        header("Location: index.php?action=cliente#pagos&mensaje_pago=" . urlencode($mensajePago));
+        exit();
+    }
+
+    // ACCIÓN GERENTE: REVISAR COMPROBANTE DE PAGO
+    if ($_POST["action"] === "actualizar_comprobante_pago") {
+        if (!in_array($_SESSION['rol'] ?? '', ['gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
+        csrf_verify();
+        require_once "config/conexion.php";
+        $db = (new Conexion())->conn;
+        $estado = trim($_POST['estado'] ?? '');
+        if (in_array($estado, ['Aprobado', 'Rechazado'], true)) {
+            $stmt = $db->prepare('UPDATE comprobantes_pago SET estado = ? WHERE id = ?');
+            $stmt->execute([$estado, (int) ($_POST['comprobante_id'] ?? 0)]);
+        }
+        header('Location: index.php?action=gerente#comprobantes-pago');
+        exit();
+    }
+
     // ACCIÓN PROVEEDOR: ACTUALIZAR ESTADO DE UNA ORDEN DE COMPRA
+    if ($_POST["action"] === "generar_orden_reabastecimiento") {
+        if (($_SESSION['rol'] ?? '') !== 'gerente') { http_response_code(403); die('Sin permisos.'); }
+        csrf_verify();
+        require_once "config/conexion.php";
+        $db = (new Conexion())->conn;
+        $db->exec("CREATE TABLE IF NOT EXISTS orden_compra (ORD_id_orden INT NOT NULL, PVR_contacto VARCHAR(12) NOT NULL, ORD_fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, ORD_estado VARCHAR(20) NOT NULL DEFAULT 'pendiente', ORD_total DECIMAL(10,2) DEFAULT NULL, ORD_retrasada TINYINT(1) NOT NULL DEFAULT 0, ORD_notas TEXT NULL) ENGINE=InnoDB");
+        $db->exec("ALTER TABLE productos ADD COLUMN IF NOT EXISTS PRO_proveedor VARCHAR(150) NOT NULL DEFAULT 'Proveedor por asignar'");
+        $db->exec("CREATE TABLE IF NOT EXISTS detalle_orden_compra (DOC_id INT NOT NULL, ORD_id_orden INT NOT NULL, PRO_codigo INT NOT NULL, DOC_cantidad INT NOT NULL, DOC_precio_unitario DECIMAL(10,2) NOT NULL) ENGINE=InnoDB");
+        $productoId = (int) ($_POST['producto_id'] ?? 0);
+        $productoStmt = $db->prepare('SELECT PRO_nombre_producto, PRO_stock_actual, PRO_stock_minimo, COALESCE(PRO_stock_maximo, PRO_stock_minimo * 2) AS stock_objetivo, PRO_costo_base, PRO_proveedor FROM productos WHERE PRO_codigo = ? AND deleted_at IS NULL');
+        $productoStmt->execute([$productoId]);
+        $producto = $productoStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$producto) { header('Location: index.php?action=proveedor&msg=' . urlencode('Producto no encontrado.')); exit(); }
+        $cantidad = max(1, (int) $producto['stock_objetivo'] - (int) $producto['PRO_stock_actual']);
+        $ordenId = (int) $db->query('SELECT COALESCE(MAX(ORD_id_orden), 0) + 1 FROM orden_compra')->fetchColumn();
+        $detalleId = (int) $db->query('SELECT COALESCE(MAX(DOC_id), 0) + 1 FROM detalle_orden_compra')->fetchColumn();
+        $total = $cantidad * (float) $producto['PRO_costo_base'];
+        $db->beginTransaction();
+        try {
+            $stmt = $db->prepare("INSERT INTO orden_compra (ORD_id_orden, PVR_contacto, ORD_estado, ORD_total, ORD_notas) VALUES (?, ?, 'pendiente', ?, ?)");
+            $stmt->execute([$ordenId, substr((string) $producto['PRO_proveedor'], 0, 12), $total, 'Reabastecimiento automático por stock bajo.']);
+            $stmt = $db->prepare('INSERT INTO detalle_orden_compra (DOC_id, ORD_id_orden, PRO_codigo, DOC_cantidad, DOC_precio_unitario) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$detalleId, $ordenId, $productoId, $cantidad, $producto['PRO_costo_base']]);
+            $db->commit();
+            $msg = "Orden OC-$ordenId generada para {$producto['PRO_nombre_producto']}.";
+        } catch (Throwable $exception) {
+            if ($db->inTransaction()) { $db->rollBack(); }
+            $msg = 'No fue posible generar la orden de reabastecimiento.';
+        }
+        header('Location: index.php?action=proveedor&msg=' . urlencode($msg) . '#alertas-stock');
+        exit();
+    }
+
     if ($_POST["action"] === "actualizar_orden") {
         $rol = $_SESSION['rol'] ?? '';
         if (!in_array($rol, ['proveedor', 'gerente'], true)) { http_response_code(403); die('Sin permisos.'); }
@@ -398,8 +499,9 @@ function vista_home_para_rol(string $rol): string
 {
     switch ($rol) {
         case 'gerente':
-        case 'inventario':
             return "view/gerente_sbadm.php";
+        case 'inventario':
+            return "view/inventario.php";
         case 'proveedor':
             return "view/proveedores_dashboard.php";
         case 'cliente':
@@ -414,8 +516,10 @@ if (isset($_SESSION["user"])) {
     $action = $_GET["action"] ?? 'usuario';
     $section = $_GET["section"] ?? 'home';
     $rol = $_SESSION["rol"] ?? 'cliente';
-    
-    if ($action === "cliente" && ($rol === "cliente" || $rol === "gerente")) {
+
+    if ($action === "pago_seguro" && in_array($rol, ['cliente', 'gerente'], true)) {
+        require_once "view/pago_seguro.php";
+    } elseif ($action === "cliente" && ($rol === "cliente" || $rol === "gerente")) {
         require_once "view/clientes_dashboard.php";
     } elseif ($action === "gerente" && $rol === "gerente") {
         require_once "view/gerente_sbadm.php";
@@ -443,8 +547,10 @@ if (isset($_SESSION["user"])) {
             require_once "view/clientes_dashboard.php";
         } elseif ($rol === "proveedor") {
             require_once "view/proveedores_dashboard.php";
-        } elseif ($rol === "gerente" || $rol === "inventario") {
+        } elseif ($rol === "gerente") {
             require_once "view/gerente_sbadm.php";
+        } elseif ($rol === "inventario") {
+            require_once "view/inventario.php";
         } else {
             require_once "view/clientes_dashboard.php";
         }

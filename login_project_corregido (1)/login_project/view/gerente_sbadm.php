@@ -12,9 +12,25 @@ $stats = ['todaySales' => 0, 'weekSales' => 0, 'monthSales' => 0, 'stockUnits' =
 $weekly = array_fill(0, 7, 0);
 $monthly = array_fill(0, 6, 0);
 $recentSales = [];
+$paymentProofs = [];
 $dashboardError = '';
 
 try {
+    $db->exec("CREATE TABLE IF NOT EXISTS comprobantes_pago (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        id_usuario INT NOT NULL,
+        medio_pago ENUM('Nequi','Bancolombia','Davivienda','Banco de la Vivienda') NOT NULL,
+        monto DECIMAL(12,2) NOT NULL,
+        referencia VARCHAR(100) NOT NULL,
+        comprobante VARCHAR(255) NOT NULL,
+        estado ENUM('Pendiente','Aprobado','Rechazado') NOT NULL DEFAULT 'Pendiente',
+        fecha_envio DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_comprobantes_estado (estado),
+        INDEX idx_comprobantes_usuario (id_usuario)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("ALTER TABLE comprobantes_pago ADD COLUMN IF NOT EXISTS direccion_envio VARCHAR(200) NOT NULL DEFAULT '' AFTER referencia");
+    $db->exec("ALTER TABLE comprobantes_pago ADD COLUMN IF NOT EXISTS numero_factura VARCHAR(50) NOT NULL DEFAULT '' AFTER direccion_envio");
+    $paymentProofs = $db->query("SELECT cp.id, cp.medio_pago, cp.monto, cp.referencia, cp.direccion_envio, cp.numero_factura, cp.comprobante, cp.estado, cp.fecha_envio, COALESCE(CONCAT(u.nombre, ' ', u.apellido), u.username, 'Cliente') AS cliente FROM comprobantes_pago cp LEFT JOIN usuarios u ON u.id = cp.id_usuario ORDER BY cp.fecha_envio DESC LIMIT 30")->fetchAll(PDO::FETCH_ASSOC);
     $productStats = $db->query('SELECT COUNT(*) AS products, COALESCE(SUM(PRO_stock_actual), 0) AS units, COALESCE(SUM(PRO_stock_actual <= PRO_stock_minimo), 0) AS low FROM productos WHERE deleted_at IS NULL')->fetch(PDO::FETCH_ASSOC);
     $stats['products'] = (int) ($productStats['products'] ?? 0);
     $stats['stockUnits'] = (int) ($productStats['units'] ?? 0);
@@ -55,8 +71,13 @@ for ($i = 5; $i >= 0; $i--) $monthLabels[] = $monthNames[(int) date('n', strtoti
         :root { --dashboard-ink: #172033; --dashboard-muted: #718096; }
         body { background: #f3f6fa; }
         #layoutSidenav_content main { background: radial-gradient(circle at 92% 0%, rgba(255, 193, 7, .11), transparent 27rem), #f3f6fa; min-height: calc(100vh - 56px); }
-        .dashboard-title { color: var(--dashboard-ink); font-weight: 800; letter-spacing: -.02em; }
+        .dashboard-title { color: #ffc107 !important; font-weight: 800; letter-spacing: -.02em; }
         .dashboard-subtitle { color: var(--dashboard-muted); }
+        #comprobantes-pago table,
+        #comprobantes-pago table > :not(caption) > * > *,
+        #comprobantes-pago tbody td { color: #ffffff !important; }
+        #comprobantes-pago tbody td small,
+        #comprobantes-pago .text-muted { color: #b8c7d1 !important; }
         .kpi-card { border: 0; border-radius: 14px; color: #fff; overflow: hidden; box-shadow: 0 12px 25px rgba(25, 39, 61, .12); transition: transform .2s ease, box-shadow .2s ease; }
         .kpi-card:hover { transform: translateY(-4px); box-shadow: 0 18px 30px rgba(25, 39, 61, .2); }
         .kpi-card .card-body { min-height: 132px; position: relative; padding: 1.35rem 1.4rem; }
@@ -99,6 +120,7 @@ for ($i = 5; $i >= 0; $i--) $monthLabels[] = $monthNames[(int) date('n', strtoti
             <ol class="breadcrumb mb-4"><li class="breadcrumb-item active dashboard-subtitle">Resumen general de C&amp;M Soluciones Abrasivas SAS</li></ol>
             <div class="card border-0 shadow-sm mb-4 bg-dark text-white"><div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3"><div><span class="text-warning text-uppercase small fw-bold"><i class="fas fa-bolt me-1"></i> Gestión rápida</span><h4 class="mt-1 mb-1">Publica productos para tus clientes</h4><p class="mb-0 text-white-50">Cada producto agregado al inventario se muestra automáticamente en el catálogo del portal cliente.</p></div><a class="btn btn-warning fw-bold text-dark" href="index.php?action=inventario"><i class="fas fa-plus me-2"></i>Agregar producto</a></div></div>
             <?php if ($dashboardError): ?><div class="alert alert-warning" role="alert"><i class="fas fa-triangle-exclamation me-2"></i><?php echo htmlspecialchars($dashboardError, ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
+            <div class="card border-0 shadow-sm mb-4" id="comprobantes-pago"><div class="card-header d-flex align-items-center justify-content-between"><span><i class="fas fa-receipt me-2"></i>COMPROBANTES DE PAGO RECIBIDOS</span><span class="badge bg-warning text-dark"><?php echo count(array_filter($paymentProofs, static fn ($proof) => $proof['estado'] === 'Pendiente')); ?> pendientes</span></div><div class="card-body table-responsive"><table class="table table-striped table-bordered align-middle"><thead><tr><th>Factura</th><th>Cliente</th><th>Medio</th><th>Monto</th><th>Referencia</th><th>Dirección de envío</th><th>Comprobante</th><th>Estado</th><th>Revisión</th></tr></thead><tbody><?php if (!$paymentProofs): ?><tr><td colspan="9" class="text-center text-muted">No hay comprobantes enviados.</td></tr><?php endif; ?><?php foreach ($paymentProofs as $proof): ?><tr><td><?php echo htmlspecialchars($proof['numero_factura'], ENT_QUOTES, 'UTF-8'); ?></td><td><?php echo htmlspecialchars($proof['cliente'], ENT_QUOTES, 'UTF-8'); ?><br><small><?php echo date('d/m/Y H:i', strtotime($proof['fecha_envio'])); ?></small></td><td><?php echo htmlspecialchars($proof['medio_pago'], ENT_QUOTES, 'UTF-8'); ?></td><td>$ <?php echo number_format((float) $proof['monto'], 0, ',', '.'); ?></td><td><?php echo htmlspecialchars($proof['referencia'], ENT_QUOTES, 'UTF-8'); ?></td><td><?php echo htmlspecialchars($proof['direccion_envio'], ENT_QUOTES, 'UTF-8'); ?></td><td><a class="btn btn-sm btn-outline-primary" href="<?php echo htmlspecialchars($proof['comprobante'], ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener"><i class="fas fa-eye me-1"></i>Ver prueba</a></td><td><span class="badge <?php echo $proof['estado'] === 'Aprobado' ? 'bg-success' : ($proof['estado'] === 'Rechazado' ? 'bg-danger' : 'bg-warning text-dark'); ?>"><?php echo htmlspecialchars($proof['estado'], ENT_QUOTES, 'UTF-8'); ?></span></td><td><?php if ($proof['estado'] === 'Pendiente'): ?><form method="post" action="index.php?action=gerente#comprobantes-pago" class="d-flex gap-1"><input type="hidden" name="action" value="actualizar_comprobante_pago"><?php echo csrf_field(); ?><input type="hidden" name="comprobante_id" value="<?php echo (int) $proof['id']; ?>"><button class="btn btn-sm btn-success" name="estado" value="Aprobado" type="submit">Aprobar</button><button class="btn btn-sm btn-danger" name="estado" value="Rechazado" type="submit">Rechazar</button></form><?php else: ?><span class="text-muted">Revisado</span><?php endif; ?></td></tr><?php endforeach; ?></tbody></table></div></div>
             <div class="row">
                 <div class="col-xl-3 col-md-6"><a class="text-decoration-none" href="index.php?action=reportes"><div class="card kpi-card kpi-blue mb-4"><div class="card-body"><div class="kpi-label">Ventas del día</div><div id="todaySalesMetric" class="kpi-value">$ <?php echo number_format($stats['todaySales'], 0, ',', '.'); ?></div><i class="fas fa-sun kpi-icon"></i></div><div class="card-footer">Hoy <i class="fas fa-arrow-up ms-1"></i></div></div></a></div>
                 <div class="col-xl-3 col-md-6"><a class="text-decoration-none" href="index.php?action=reportes"><div class="card kpi-card kpi-cyan mb-4"><div class="card-body"><div class="kpi-label">Ventas de la semana</div><div id="weekSalesMetric" class="kpi-value">$ <?php echo number_format($stats['weekSales'], 0, ',', '.'); ?></div><i class="fas fa-chart-line kpi-icon"></i></div><div class="card-footer">Lunes a domingo <i class="fas fa-arrow-up ms-1"></i></div></div></a></div>
