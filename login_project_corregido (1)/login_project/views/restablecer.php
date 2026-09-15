@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/../config/require_auth.php';
 
+// MVC: si AuthController ya validó el token, solo presentar.
+// Bloque legacy solo para acceso directo (se conserva para no perder nada).
+if (empty($__MVC_READY ?? null)) {
 // Validación del token (GET = viene del enlace; POST = ya validado en index.php)
 $errorRestablecer = $errorRestablecer ?? '';
 if (isset($_GET['token'])) {
@@ -22,6 +25,9 @@ if (isset($_GET['token'])) {
         }
     }
 }
+$tokenRestablecer = $tokenRestablecer ?? '';
+} // fin legacy
+$errorRestablecer = $errorRestablecer ?? '';
 $tokenRestablecer = $tokenRestablecer ?? '';
 ?>
 <!DOCTYPE html>
@@ -114,5 +120,6 @@ $tokenRestablecer = $tokenRestablecer ?? '';
     </div>
 
     <script>lucide.createIcons();</script>
+    <?php require __DIR__.'/partials/swal.php'; ?>
 </body>
 </html>

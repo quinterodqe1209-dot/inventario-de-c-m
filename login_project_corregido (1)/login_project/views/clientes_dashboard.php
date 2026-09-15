@@ -3,6 +3,9 @@ require_once __DIR__ . '/../config/require_auth.php';
 require_role(['cliente','gerente']);
 
 require_once __DIR__ . '/../config/conexion.php';
+// MVC: si ClienteController ya entregó $catalogProducts/$pqrs/etc., solo presentar.
+// Bloque legacy (acceso directo) preservado para no perder funcionalidad.
+if (empty($__MVC_READY ?? null)) {
 $catalogProducts = [];
 $pqrs = [];
 $pqrsMessage = '';
@@ -139,11 +142,28 @@ try {
     $catalogProducts = [];
     $pqrsError = 'No fue posible cargar tus PQRS en este momento.';
 }
+} // fin legacy
 $kpiComprasMes = $kpiComprasMes ?? 0.0;
 $misFacturas = $misFacturas ?? [];
 $facturasPendientes = $facturasPendientes ?? 0;
 $pqrsResueltas = $pqrsResueltas ?? 0;
 $mqrsTotal = $mqrsTotal ?? 0;
+// Defaults MVC (cuando viene del controlador).
+$catalogProducts = $catalogProducts ?? [];
+$pqrs = $pqrs ?? [];
+$pqrsMessage = $pqrsMessage ?? '';
+$pqrsError = $pqrsError ?? '';
+$stockByName = $stockByName ?? [];
+$favoriteProductIds = $favoriteProductIds ?? [];
+$favoriteMessage = $favoriteMessage ?? '';
+$paymentMessage = $paymentMessage ?? trim($_GET['mensaje_pago'] ?? '');
+$paymentAmount = $paymentAmount ?? 0;
+$paymentInvoice = $paymentInvoice ?? '';
+$paymentProofs = $paymentProofs ?? [];
+$busquedaCatalogo = $busquedaCatalogo ?? trim($_GET['q'] ?? '');
+$paginaCatalogo = $paginaCatalogo ?? 1;
+$totalPaginasCatalogo = $totalPaginasCatalogo ?? 1;
+$totalCatalogo = $totalCatalogo ?? count($catalogProducts);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -167,11 +187,12 @@ $mqrsTotal = $mqrsTotal ?? 0;
                 <i class="fas fa-bars"></i>
             </button>
             
-            <!-- Navbar Search -->
-            <form id="catalogSearchForm" class="d-none d-md-inline-block form-inline ms-auto me-0 me-md-3 my-2 my-md-0">
+            <!-- Navbar Search: consulta real al catálogo (GET ?action=cliente&q=) -->
+            <form action="index.php#catalogo" method="get" class="d-none d-md-inline-block form-inline ms-auto me-0 me-md-3 my-2 my-md-0">
+                <input type="hidden" name="action" value="cliente">
                 <div class="input-group">
-                    <input id="catalogSearchInput" class="form-control" type="search" placeholder="Buscar abrasivos, discos..." aria-label="Buscar..." aria-describedby="btnNavbarSearch" />
-                    <button class="btn btn-primary" id="btnNavbarSearch" type="submit"><i class="fas fa-search"></i></button>
+                    <input name="q" class="form-control" type="search" placeholder="Buscar abrasivos, discos..." aria-label="Buscar..." value="<?php echo htmlspecialchars($busquedaCatalogo, ENT_QUOTES, 'UTF-8'); ?>" />
+                    <button class="btn btn-primary" type="submit" title="Buscar"><i class="fas fa-search"></i></button>
                 </div>
             </form>
             
@@ -343,9 +364,17 @@ $mqrsTotal = $mqrsTotal ?? 0;
 
                         <!-- SECCIÓN 2: VER EL CATÁLOGO DE PRODUCTOS -->
                         <div class="card mb-4" id="catalogo">
-                            <div class="card-header bg-dark text-white">
-                                <i class="fas fa-store me-1"></i>
-                                <strong>CATÁLOGO DE PRODUCTOS ABRASIVOS</strong>
+                            <div class="card-header bg-dark text-white d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                <span><i class="fas fa-store me-1"></i>
+                                <strong>CATÁLOGO DE PRODUCTOS ABRASIVOS</strong></span>
+                                <form action="index.php#catalogo" method="get" class="d-flex gap-1">
+                                    <input type="hidden" name="action" value="cliente">
+                                    <div class="input-group input-group-sm">
+                                        <input type="search" name="q" class="form-control" placeholder="Buscar en catálogo..." value="<?php echo htmlspecialchars($busquedaCatalogo, ENT_QUOTES, 'UTF-8'); ?>">
+                                        <button class="btn btn-warning" type="submit" title="Buscar"><i class="fas fa-search"></i></button>
+                                    </div>
+                                    <?php if ($busquedaCatalogo !== ''): ?><a href="index.php?action=cliente#catalogo" class="btn btn-sm btn-outline-light">Limpiar</a><?php endif; ?>
+                                </form>
                             </div>
                             <div class="card-body">
                                 <?php if ($favoriteMessage): ?><div class="alert alert-success py-2"><?php echo htmlspecialchars($favoriteMessage, ENT_QUOTES, 'UTF-8'); ?></div><?php endif; ?>
@@ -379,8 +408,10 @@ $mqrsTotal = $mqrsTotal ?? 0;
                                             </div>
                                         </div>
                                     <?php endforeach; ?>
-                                    <?php if (!$catalogProducts): ?><div class="col-12"><div class="alert alert-info mb-0"><i class="fas fa-info-circle me-2"></i>El catálogo está esperando nuevos productos del gerente.</div></div><?php endif; ?>
+                                    <?php if (!$catalogProducts): ?><div class="col-12"><div class="alert alert-info mb-0"><i class="fas fa-info-circle me-2"></i><?php echo $busquedaCatalogo !== '' ? 'Sin resultados para "' . htmlspecialchars($busquedaCatalogo, ENT_QUOTES, 'UTF-8') . '". Prueba con otra palabra.' : 'El catálogo está esperando nuevos productos del gerente.'; ?></div></div><?php endif; ?>
                                 </div>
+                                <?php echo pager_html((int) $paginaCatalogo, (int) $totalPaginasCatalogo, ['action' => 'cliente', 'q' => $busquedaCatalogo], 'page', 'catalogo'); ?>
+                                <?php if ($totalCatalogo > 0): ?><p class="text-muted small text-center mb-0">Mostrando <?php echo count($catalogProducts); ?> de <?php echo (int) $totalCatalogo; ?> productos<?php if ($busquedaCatalogo !== ''): ?> para "<strong><?php echo htmlspecialchars($busquedaCatalogo, ENT_QUOTES, 'UTF-8'); ?></strong>"<?php endif; ?> · página <?php echo (int) $paginaCatalogo; ?> de <?php echo (int) $totalPaginasCatalogo; ?></p><?php endif; ?>
                             </div>
                         </div>
 
@@ -699,7 +730,13 @@ $mqrsTotal = $mqrsTotal ?? 0;
                 matches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
 
-            document.getElementById('catalogSearchForm').addEventListener('submit', searchCatalogProduct);
+            // La búsqueda del catálogo ahora es de servidor (GET ?action=cliente&q=).
+            // Se conserva searchCatalogProduct por compatibilidad, con guard anti-nulos.
+            const catalogSearchForm = document.getElementById('catalogSearchForm');
+            if (catalogSearchForm) {
+                catalogSearchForm.addEventListener('submit', searchCatalogProduct);
+            }
         </script>
+        <?php require __DIR__.'/partials/swal.php'; ?>
     </body>
 </html>

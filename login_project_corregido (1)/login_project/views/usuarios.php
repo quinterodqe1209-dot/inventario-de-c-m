@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../config/require_auth.php';
-require_role(['gerente']);
+require_role(['gerente', 'admin']);
 
+// MVC: si el controlador (UsuarioController::listadoAdmin) ya entregó $usuarios, solo presentar.
+// Bloque legacy solo para acceso directo.
+if (empty($__MVC_READY ?? null)) {
 // Procesar eliminación LÓGICA de usuario (soft delete: marca deleted_at)
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"]) && $_POST["action"] === "eliminar_usuario") {
     csrf_verify();
@@ -44,7 +47,7 @@ $usuarios = [];
 $totalUsuarios = 0;
 $totalPaginas = 1;
 
-if ($_SESSION["rol"] === "gerente") {
+if (in_array($_SESSION["rol"] ?? '', ["gerente", "admin"], true)) {
     try {
         $db = (new Conexion())->conn;
 
@@ -83,12 +86,27 @@ if ($_SESSION["rol"] === "gerente") {
     }
 }
 $statsRow = $statsRow ?? ['total' => 0, 'gerentes' => 0, 'estandar' => 0];
+} // fin legacy
+// Defaults MVC.
+$usuarios = $usuarios ?? [];
+$totalUsuarios = $totalUsuarios ?? count($usuarios);
+$totalPaginas = $totalPaginas ?? 1;
+$paginaActual = $paginaActual ?? 1;
+$busqueda = $busqueda ?? trim($_GET['q'] ?? '');
+$orden = $orden ?? 'id';
+$direccion = $direccion ?? 'DESC';
+$statsRow = $statsRow ?? ['total' => 0, 'gerentes' => 0, 'estandar' => 0];
+$mensaje_exito = $mensaje_exito ?? '';
+$error_eliminar = $error_eliminar ?? '';
+$error_lista = $error_lista ?? '';
 
+if (!function_exists('usuarios_link_orden')) {
 function usuarios_link_orden(string $campo, string $ordenActual, string $direccionActual, string $busqueda): string
 {
     $nuevaDireccion = ($ordenActual === $campo && $direccionActual === 'ASC') ? 'DESC' : 'ASC';
     return 'index.php?action=usuario&section=usuarios&orden=' . urlencode($campo)
         . '&dir=' . $nuevaDireccion . '&q=' . urlencode($busqueda);
+}
 }
 ?>
 

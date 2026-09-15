@@ -64,6 +64,7 @@ $activeUsuarios = in_array($vista_contenido, ['views/usuarios.php', 'views/nuevo
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/scripts.js"></script>
+    <?php require __DIR__.'/partials/swal.php'; ?>
     <script>
         document.getElementById('globalSearchForm').addEventListener('submit', function (event) {
             event.preventDefault();
@@ -75,7 +76,9 @@ $activeUsuarios = in_array($vista_contenido, ['views/usuarios.php', 'views/nuevo
 
             const match = elements.find(element => element.textContent.toLowerCase().includes(query));
             if (!match) {
-                window.alert('No se encontró "' + document.getElementById('globalSearchInput').value.trim() + '" en este dashboard.');
+                var q = document.getElementById('globalSearchInput').value.trim();
+                if (window.Swal) { Swal.fire({ icon: 'info', title: 'Sin resultados', text: 'No se encontró "' + q + '" en este dashboard.', confirmButtonColor: '#0d6efd' }); }
+                else { window.alert('No se encontró "' + q + '" en este dashboard.'); }
                 return;
             }
 

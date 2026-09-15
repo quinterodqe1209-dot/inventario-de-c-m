@@ -1,3 +1,39 @@
+<?php
+// views/proveedores_dashboard.php — Panel proveedor/stock.
+// MVC: el controlador (ProveedorController::datosPanel) inyecta $stockBajo/$ordenes/$msg.
+// El React original se conserva intacto abajo; solo se agrega: guard de rol,
+// panel real con formularios funcionales y window.CM_REAL para hidratar el mock.
+require_once __DIR__ . '/../config/require_auth.php';
+require_role(['proveedor', 'gerente', 'admin']);
+$stockBajo = $stockBajo ?? [];
+$ordenes = $ordenes ?? [];
+$despachos = $despachos ?? [];
+$facturasReales = $facturas ?? [];
+$msg = $msg ?? trim($_GET['msg'] ?? '');
+$rolPanel = $rol ?? ($_SESSION['rol'] ?? 'proveedor');
+$usernamePanel = $username ?? ($_SESSION['user']['username'] ?? 'Proveedor');
+$cmReal = [
+    'productosReales' => array_map(static function (array $p): array {
+        $stock = (int) ($p['PRO_stock_actual'] ?? 0);
+        $min = max(1, (int) ($p['PRO_stock_minimo'] ?? 1));
+        return [
+            'id' => 'real-' . (int) ($p['PRO_codigo'] ?? 0),
+            'codigoReal' => (int) ($p['PRO_codigo'] ?? 0),
+            'sku' => 'PRO-' . (int) ($p['PRO_codigo'] ?? 0),
+            'descripcion' => $p['PRO_nombre_producto'] ?? 'Producto',
+            'proveedorId' => 'real-prov',
+            'stockActual' => $stock,
+            'stockMinimo' => $min,
+            'stockOptimo' => (int) ($p['stock_objetivo'] ?? ($min * 2)),
+            'costoUnitarioCOP' => (float) ($p['PRO_costo_base'] ?? 0),
+            'consumoPromedioDiario' => 1,
+        ];
+    }, is_array($stockBajo) ? $stockBajo : []),
+    'ordenesReales' => is_array($ordenes) ? array_slice($ordenes, 0, 20) : [],
+    'totalAlertasReales' => is_array($stockBajo) ? count($stockBajo) : 0,
+    'totalOrdenesReales' => is_array($ordenes) ? count($ordenes) : 0,
+];
+?>
 <!doctype html>
 <html lang="es" class="dark">
   <head>
@@ -40,6 +76,49 @@
     <script src="https://unpkg.com/lucide@latest"></script>
   </head>
   <body class="bg-[#0c0d0e] text-[#e2e8f0] font-sans antialiased selection:bg-[#d97706]/30 selection:text-amber-200">
+    <script>window.CM_REAL = <?php echo json_encode($cmReal, JSON_UNESCAPED_UNICODE); ?>;</script>
+    <?php if ($msg !== ''): ?>
+    <div style="max-width:1100px;margin:12px auto;padding:10px 16px;background:#102b23;border:1px solid #198754;border-radius:10px;color:#d1e7dd;font-family:sans-serif;"><?php echo htmlspecialchars($msg, ENT_QUOTES, 'UTF-8'); ?></div>
+    <?php endif; ?>
+    <div style="max-width:1100px;margin:12px auto;padding:14px 16px;background:#101923;border:1px solid #334554;border-radius:12px;color:#e2e8f0;font-family:sans-serif;">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+        <div><strong>Datos reales conectados</strong> — <?php echo count($stockBajo); ?> productos en stock bajo · <?php echo count($ordenes); ?> órdenes en BD · <span style="color:#9fb3c8;">demo visual abajo intacta</span></div>
+        <div style="display:flex;gap:8px;">
+          <a href="index.php?action=proveedor&msg=<?php echo urlencode('Panel recargado desde BD.'); ?>" style="background:#d97706;color:#111;padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:700;">Recargar reales</a>
+          <a href="index.php?action=<?php echo $rolPanel === 'proveedor' ? 'proveedor' : 'gerente'; ?>" style="border:1px solid #536575;color:#fff;padding:8px 12px;border-radius:8px;text-decoration:none;">Volver</a>
+        </div>
+      </div>
+      <?php if ($stockBajo): ?>
+      <div style="margin-top:12px;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="color:#9fb3c8;text-align:left;"><th>Producto real</th><th>Stock</th><th>Mín.</th><th>Proveedor</th><th>Acción real</th></tr></thead>
+        <tbody>
+        <?php foreach (array_slice($stockBajo, 0, 10) as $p): ?>
+          <tr style="border-top:1px solid #22303d;">
+            <td><?php echo htmlspecialchars($p['PRO_nombre_producto'] ?? ('PRO-'.$p['PRO_codigo']), ENT_QUOTES, 'UTF-8'); ?> <small style="color:#9fb3c8;">#<?php echo (int) $p['PRO_codigo']; ?></small></td>
+            <td><?php echo (int) $p['PRO_stock_actual']; ?></td>
+            <td><?php echo (int) $p['PRO_stock_minimo']; ?></td>
+            <td><?php echo htmlspecialchars($p['PRO_proveedor'] ?? 'Por asignar', ENT_QUOTES, 'UTF-8'); ?></td>
+            <td>
+              <?php if (in_array($rolPanel, ['gerente', 'admin'], true)): ?>
+              <form method="post" action="index.php?action=proveedor" style="display:inline;"><?php echo csrf_field(); ?><input type="hidden" name="action" value="generar_orden_reabastecimiento"><input type="hidden" name="producto_id" value="<?php echo (int) $p['PRO_codigo']; ?>"><button style="background:#198754;color:#fff;border:0;padding:6px 10px;border-radius:6px;cursor:pointer;">Generar OC real</button></form>
+              <?php else: ?><span style="color:#9fb3c8;">Solo gerente genera OC</span><?php endif; ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <?php else: ?>
+      <p style="color:#9fb3c8;margin:10px 0 0;">Sin alertas reales de stock bajo. El inventario está sano o aún no hay productos.</p>
+      <?php endif; ?>
+      <?php if ($ordenes): ?>
+      <details style="margin-top:10px;"><summary style="cursor:pointer;color:#f5c400;">Ver últimas órdenes reales (<?php echo count($ordenes); ?>)</summary>
+        <div style="overflow-x:auto;margin-top:8px;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="color:#9fb3c8;text-align:left;"><th>OC</th><th>Estado</th><th>Total</th><th>Fecha</th></tr></thead>
+          <tbody><?php foreach (array_slice($ordenes, 0, 10) as $o): ?><tr style="border-top:1px solid #22303d;"><td>OC-<?php echo (int) $o['ORD_id_orden']; ?></td><td><?php echo htmlspecialchars($o['ORD_estado'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td><td>$<?php echo number_format((float) ($o['ORD_total'] ?? 0), 0, ',', '.'); ?></td><td><?php echo htmlspecialchars($o['ORD_fecha'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td></tr><?php endforeach; ?></tbody>
+        </table></div>
+      </details>
+      <?php endif; ?>
+    </div>
     <div id="root"></div>
 
     <script type="text/babel">
@@ -2154,7 +2233,11 @@ DELIMITER ;`;
       const App = () => {
         const [currentRole, setCurrentRole] = useState('GERENTE');
         const [proveedores, setProveedores] = useState(PROVEEDORES_INICIALES);
-        const [productos, setProductos] = useState(PRODUCTOS_INICIALES);
+        // Si el backend inyectó productos reales, se fusionan con el mock sin romper la demo.
+        const productosIniciales = (window.CM_REAL && window.CM_REAL.productosReales && window.CM_REAL.productosReales.length > 0)
+          ? window.CM_REAL.productosReales.concat(PRODUCTOS_INICIALES)
+          : PRODUCTOS_INICIALES;
+        const [productos, setProductos] = useState(productosIniciales);
         const [ordenesCompra, setOrdenesCompra] = useState(ORDENES_COMPRA_INICIALES);
         const [facturas, setFacturas] = useState(FACTURAS_INICIALES);
         const [selectedProveedorId, setSelectedProveedorId] = useState('prov-1');

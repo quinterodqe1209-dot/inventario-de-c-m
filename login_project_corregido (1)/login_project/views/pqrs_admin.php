@@ -3,6 +3,8 @@ require_once __DIR__ . '/../config/require_auth.php';
 require_role(['gerente','admin']);
 
 require_once __DIR__ . '/../config/conexion.php';
+// MVC: si el controlador ya entregó $listaPqrs/$conteos, solo presentar.
+if (empty($__MVC_READY ?? null)) {
 $db = (new Conexion())->conn;
 
 $user = $_SESSION['user'] ?? [];
@@ -34,6 +36,19 @@ $conteos = [];
 foreach ($estadosPqrs as $est) {
     $conteos[$est] = (int) $db->query("SELECT COUNT(*) FROM pqrs WHERE estado = " . $db->quote($est))->fetchColumn();
 }
+} // fin legacy
+// Defaults MVC.
+$listaPqrs = $listaPqrs ?? [];
+$conteos = $conteos ?? array_fill_keys($estadosPqrs ?? ['Pendiente','En revisión','Resuelta','Cancelada'], 0);
+$msgPqrs = $msgPqrs ?? trim($_GET['msg'] ?? '');
+$filtroEstado = $filtroEstado ?? trim($_GET['estado'] ?? '');
+$busquedaPqrs = $busquedaPqrs ?? trim($_GET['q'] ?? '');
+$paginaActual = $paginaActual ?? 1;
+$totalPaginas = $totalPaginas ?? 1;
+$totalPqrs = $totalPqrs ?? count($listaPqrs);
+$estadosPqrs = $estadosPqrs ?? ['Pendiente', 'En revisión', 'Resuelta', 'Cancelada'];
+$username = $username ?? ($_SESSION['user']['username'] ?? 'Usuario');
+$role = $role ?? ($_SESSION['rol'] ?? 'gerente');
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -95,7 +110,7 @@ foreach ($estadosPqrs as $est) {
             <div class="card mb-4 border-0 shadow-sm">
                 <div class="card-header bg-white d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <span><i class="fas fa-headset me-1"></i> Solicitudes recibidas</span>
-                    <form method="get" action="index.php" class="d-flex gap-2 align-items-center">
+                    <form method="get" action="index.php" class="d-flex gap-2 align-items-center flex-wrap">
                         <input type="hidden" name="action" value="pqrs">
                         <select name="estado" class="form-select form-select-sm" style="width:auto">
                             <option value="">Todos los estados</option>
@@ -103,8 +118,12 @@ foreach ($estadosPqrs as $est) {
                                 <option value="<?php echo htmlspecialchars($est, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $filtroEstado === $est ? 'selected' : ''; ?>><?php echo htmlspecialchars($est, ENT_QUOTES, 'UTF-8'); ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <div class="input-group input-group-sm" style="width:auto">
+                            <input type="search" name="q" class="form-control" placeholder="Buscar cliente, tipo..." value="<?php echo htmlspecialchars($busquedaPqrs, ENT_QUOTES, 'UTF-8'); ?>">
+                            <button class="btn btn-outline-primary" type="submit" title="Buscar"><i class="fas fa-search"></i></button>
+                        </div>
                         <button class="btn btn-sm btn-outline-primary" type="submit"><i class="fas fa-filter me-1"></i>Filtrar</button>
-                        <?php if ($filtroEstado !== ''): ?><a href="index.php?action=pqrs" class="btn btn-sm btn-outline-secondary">Limpiar</a><?php endif; ?>
+                        <?php if ($filtroEstado !== '' || $busquedaPqrs !== ''): ?><a href="index.php?action=pqrs" class="btn btn-sm btn-outline-secondary">Limpiar</a><?php endif; ?>
                     </form>
                 </div>
                 <div class="card-body table-responsive">
@@ -143,12 +162,13 @@ foreach ($estadosPqrs as $est) {
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    <?php echo pager_html((int) $paginaActual, (int) $totalPaginas, ['action' => 'pqrs', 'estado' => $filtroEstado, 'q' => $busquedaPqrs]); ?>
+                    <?php if ($totalPqrs > 0): ?><p class="text-muted small text-center mb-0">Mostrando <?php echo count($listaPqrs); ?> de <?php echo (int) $totalPqrs; ?> solicitudes · página <?php echo (int) $paginaActual; ?> de <?php echo (int) $totalPaginas; ?></p><?php endif; ?>
                 </div>
             </div>
         </div></main><footer class="py-4 bg-light mt-auto"><div class="container-fluid px-4"><div class="small text-muted">C&M Soluciones Abrasivas SAS 2026</div></div></footer></div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js"></script>
-    <script>if (document.getElementById('pqrsTable')) { new simpleDatatables.DataTable('#pqrsTable', { labels: { placeholder: 'Buscar...', perPage: '{select} por página', noRows: 'Sin registros', info: 'Mostrando {start} a {end} de {rows}', noResults: 'Sin resultados' } }); }</script>
+    <?php require __DIR__.'/partials/swal.php'; ?>
 </body>
 </html>

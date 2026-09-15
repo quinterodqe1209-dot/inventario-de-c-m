@@ -356,5 +356,6 @@
             }
         });
     </script>
+    <?php require __DIR__.'/partials/swal.php'; ?>
 </body>
 </html>

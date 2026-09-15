@@ -96,6 +96,21 @@ body .card .card-footer:not(.kpi-card .card-footer) {
 
 /* ---------- Tablas ---------- */
 body .table { color: var(--cm-texto); }
+/* Texto SIEMPRE claro en tablas sobre fondo oscuro (pisa el rayado de Bootstrap). */
+body .table {
+  --bs-table-color: #E8EEF3;
+  --bs-table-striped-color: #E8EEF3;
+  --bs-table-hover-color: #FFFFFF;
+  --bs-table-active-color: #FFFFFF;
+  --bs-table-bg: transparent;
+}
+body .table > :not(caption) > * > *:not(.btn):not(.badge) { color: #E8EEF3; }
+body .table thead th { color: #FFFFFF; }
+body .table tbody strong { color: #FFFFFF; }
+body .table tbody .text-muted,
+body .table tbody small.text-muted,
+body .table tbody small { color: #A9BCCB !important; }
+body .table tbody a:not(.btn) { color: var(--cm-industrial-brillo); }
 body .table > :not(caption) > * > * { border-color: var(--cm-borde); }
 body .table thead th { border-bottom-color: var(--cm-borde); }
 body .table-hover > tbody > tr:hover > * { background-color: rgba(255, 200, 0, .07); }

@@ -2,6 +2,8 @@
 require_once __DIR__ . '/../config/require_auth.php';
 require_login(); // cualquier rol autenticado puede ver su propio perfil
 
+// MVC: si el controlador ya entregó $perfil_cliente, solo presentar.
+if (empty($__MVC_READY ?? null)) {
 $perfil_cliente = [
     'USU_documento_identidad' => '',
     'PFL_historial_compra' => '',
@@ -99,6 +101,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"]) && $_POST["
         }
     }
 }
+} // fin legacy
+// Defaults MVC.
+$perfil_cliente = $perfil_cliente ?? ['USU_documento_identidad' => $_SESSION['user']['documento_id'] ?? '', 'PFL_historial_compra' => '', 'PFL_productos_favoritos' => '', 'PFL_fecha_compra' => '', 'PFL_estado_pedidos' => ''];
+$productosFavoritos = $productosFavoritos ?? [];
+$mensaje_exito = $mensaje_exito ?? '';
+$error_perfil = $error_perfil ?? '';
+$error_password = $error_password ?? '';
 ?>
 
 <style>
@@ -410,3 +419,5 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"]) && $_POST["
         </div>
     </div>
 </div>
+
+<?php require __DIR__.'/partials/swal.php'; ?>

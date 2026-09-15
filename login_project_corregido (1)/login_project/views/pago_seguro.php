@@ -2,10 +2,17 @@
 require_once __DIR__ . '/../config/require_auth.php';
 require_role(['cliente', 'gerente']);
 
+// MVC: el controlador ya calculó $total/$invoiceNumber; solo recalcular en acceso directo.
+if (empty($__MVC_READY ?? null)) {
 $total = max(0, (float) ($_GET['total'] ?? 0));
 $invoiceNumber = preg_replace('/[^A-Z0-9-]/', '', strtoupper((string) ($_GET['factura'] ?? '')));
 $invoiceNumber = preg_match('/^FAC-PAGO-[A-Z0-9-]+$/', $invoiceNumber) ? $invoiceNumber : 'FAC-PAGO-' . date('YmdHis');
 $formattedTotal = number_format($total, 0, ',', '.');
+} else {
+$total = $total ?? 0;
+$invoiceNumber = $invoiceNumber ?? ('FAC-PAGO-' . date('YmdHis'));
+$formattedTotal = $formattedTotal ?? number_format((float) $total, 0, ',', '.');
+}
 ?>
 <!doctype html>
 <html lang="es">

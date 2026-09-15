@@ -1,13 +1,15 @@
 <?php
 require_once __DIR__ . '/../config/require_auth.php';
-require_role(['gerente']);
+require_role(['gerente', 'admin']);
 
+// MVC: si el controlador ya entregó $usuario_editar, solo presentar.
+if (empty($__MVC_READY ?? null)) {
 // Procesar actualización de usuario (solo para administradores)
 $usuario_editar = [];
 $mensaje_exito = "";
 $error_editar = "";
 
-if ($_SESSION["rol"] !== "gerente") {
+if (!in_array($_SESSION["rol"] ?? '', ["gerente", "admin"], true)) {
     header("Location: index.php?action=usuario&section=home");
     exit();
 }
@@ -76,6 +78,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"]) && $_POST["
         $error_editar = "Por favor completa todos los campos.";
     }
 }
+} // fin legacy
+$usuario_editar = $usuario_editar ?? [];
+$mensaje_exito = $mensaje_exito ?? '';
+$error_editar = $error_editar ?? '';
 ?>
 
 <div class="container-fluid px-4">

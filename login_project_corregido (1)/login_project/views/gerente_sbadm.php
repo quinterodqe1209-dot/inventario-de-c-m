@@ -1,9 +1,12 @@
 <?php
 require_once __DIR__ . '/../config/require_auth.php';
-require_role(['gerente','inventario']);
+require_role(['gerente','inventario','admin']);
 
 require_once __DIR__ . '/../config/conexion.php';
 
+// MVC: si el controlador ya entregó los datos ($__MVC_READY), la vista SOLO presenta.
+// El bloque legacy de abajo solo corre en acceso directo, para no perder funcionalidad.
+if (empty($__MVC_READY ?? null)) {
 $db = (new Conexion())->conn;
 $user = $_SESSION['user'] ?? [];
 $username = $user['username'] ?? 'Gerente';
@@ -55,6 +58,17 @@ try {
 $monthLabels = [];
 $monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 for ($i = 5; $i >= 0; $i--) $monthLabels[] = $monthNames[(int) date('n', strtotime("-$i months")) - 1];
+} // fin legacy (solo acceso directo)
+// Defaults cuando viene del controlador (MVC): no re-consultar, solo presentar.
+$username = $username ?? ($_SESSION['user']['username'] ?? 'Gerente');
+$role = $role ?? ($_SESSION['rol'] ?? 'gerente');
+$stats = $stats ?? ['todaySales' => 0, 'weekSales' => 0, 'monthSales' => 0, 'stockUnits' => 0, 'pending' => 0, 'products' => 0, 'low' => 0];
+$weekly = $weekly ?? array_fill(0, 7, 0);
+$monthly = $monthly ?? array_fill(0, 6, 0);
+$recentSales = $recentSales ?? [];
+$paymentProofs = $paymentProofs ?? [];
+$dashboardError = $dashboardError ?? '';
+$monthLabels = $monthLabels ?? (function () { $n = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']; $o = []; for ($i = 5; $i >= 0; $i--) $o[] = $n[(int) date('n', strtotime("-$i months")) - 1]; return $o; })();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -101,7 +115,7 @@ for ($i = 5; $i >= 0; $i--) $monthLabels[] = $monthNames[(int) date('n', strtoti
     <nav class="sb-topnav navbar navbar-expand navbar-dark bg-dark">
         <a class="navbar-brand ps-3" href="index.php?action=gerente">C&M ABRASIVAS</a>
         <button class="btn btn-link btn-sm order-1 order-lg-0 me-4 me-lg-0" id="sidebarToggle" type="button"><i class="fas fa-bars"></i></button>
-        <form class="d-none d-md-inline-block form-inline ms-auto me-0 me-md-3 my-2 my-md-0"><div class="input-group"><input class="form-control" type="search" placeholder="Buscar productos, clientes..." aria-label="Buscar"><button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button></div></form>
+        <form class="d-none d-md-inline-block form-inline ms-auto me-0 me-md-3 my-2 my-md-0" action="index.php" method="get"><input type="hidden" name="action" value="inventario"><div class="input-group"><input class="form-control" type="search" name="q" placeholder="Buscar productos, clientes..." aria-label="Buscar"><button class="btn btn-primary" type="submit" title="Buscar en inventario"><i class="fas fa-search"></i></button></div></form>
         <ul class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4"><li class="nav-item dropdown"><a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown"><i class="fas fa-user fa-fw"></i> <?php echo htmlspecialchars($username, ENT_QUOTES, 'UTF-8'); ?></a><ul class="dropdown-menu dropdown-menu-end"><li><a class="dropdown-item" href="index.php?action=usuario&section=perfil">Mi perfil</a></li><li><hr class="dropdown-divider"></li><li><a class="dropdown-item" href="index.php?action=logout">Cerrar sesión</a></li></ul></li></ul>
     </nav>
     <div id="layoutSidenav">
@@ -133,5 +147,6 @@ for ($i = 5; $i >= 0; $i--) $monthLabels[] = $monthNames[(int) date('n', strtoti
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js"></script><script src="js/scripts.js"></script>
     <script>const money={callback:value=>'$ '+Number(value).toLocaleString('es-CO')};const chartOptions={maintainAspectRatio:false,animation:{duration:1200,easing:'easeOutQuart'},legend:{display:false},scales:{yAxes:[{ticks:{beginAtZero:true,min:0,callback:value=>'$ '+Number(value).toLocaleString('es-CO')},gridLines:{color:'rgba(0,0,0,.08)'}}],xAxes:[{gridLines:{display:false}}]},tooltips:{callbacks:{label:tooltipItem=>' $ '+Number(tooltipItem.yLabel).toLocaleString('es-CO')}}};const areaChart=new Chart(document.getElementById('myAreaChart'),{type:'line',data:{labels:['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'],datasets:[{label:'Ventas',backgroundColor:'rgba(13,110,253,.16)',borderColor:'#0d6efd',pointBackgroundColor:'#ffc107',pointBorderColor:'#fff',pointRadius:5,lineTension:.35,data:<?php echo json_encode($weekly); ?>}]},options:chartOptions});const barChart=new Chart(document.getElementById('myBarChart'),{type:'bar',data:{labels:<?php echo json_encode($monthLabels); ?>,datasets:[{label:'Ventas',backgroundColor:['#0d6efd','#11a8a0','#ffc107','#f59e0b','#e94b65','#7b61ff'],borderRadius:6,data:<?php echo json_encode($monthly); ?>}]},options:chartOptions});function formatMoney(value){return '$ '+Number(value).toLocaleString('es-CO');}function refreshDashboard(){fetch('index.php?action=dashboard_data',{headers:{Accept:'application/json'},cache:'no-store'}).then(response=>{if(response.redirected&&response.url&&response.url.indexOf('action=login')>-1){window.location.href=response.url;return Promise.reject();}return response.ok?response.json():Promise.reject();}).then(data=>{document.getElementById('todaySalesMetric').textContent=formatMoney(data.todaySales);document.getElementById('weekSalesMetric').textContent=formatMoney(data.weekSales);document.getElementById('monthSalesMetric').textContent=formatMoney(data.monthSales);document.getElementById('stockMetric').textContent=Number(data.stockUnits).toLocaleString('es-CO');areaChart.data.datasets[0].data=data.weekly;barChart.data.datasets[0].data=data.monthly;areaChart.update();barChart.update();}).catch(()=>{});}setInterval(refreshDashboard,30000);</script>
+<?php require __DIR__.'/partials/swal.php'; ?>
 </body>
 </html>

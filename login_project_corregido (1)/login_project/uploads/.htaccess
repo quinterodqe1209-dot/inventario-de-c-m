@@ -1,0 +1,7 @@
+# uploads: solo archivos estáticos, jamás ejecutar PHP.
+RemoveHandler .php .phtml .phar
+RemoveType .php .phtml .phar
+<FilesMatch "\.(php|phtml|phar|pl|cgi)$">
+  Require all denied
+</FilesMatch>
+Options -ExecCGI -Indexes
